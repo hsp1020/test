@@ -1,0 +1,1584 @@
+/// ==UserScript==
+// @name         HTML5 Player Gesture
+// @namespace    HSP
+// @version      1.9
+// @author       GPT
+// @match        https://*/*
+// @match        http://*/*
+// @match        ftp://*/*
+// @grant        GM_addStyle
+// @grant        GM_setValue  
+// @grant        GM_getValue
+// @run-at	    	document-start
+// ==/UserScript==
+
+//功能补充变量
+let videoEles=document.getElementsByTagName('video'),iframeEles=document.getElementsByTagName('iframe'),checkTimer=0,allowCopy=0;
+//修改Trusted-Types策略
+ window.trustedTypes?.createPolicy('default',{createHTML:string=>string,createScript:string=>string,createScriptURL:string=>string});
+
+
+
+var TGUserDefaultSetting = {
+    global : {
+        gSwitchState:true,
+        gSwitchProgress:true,
+        gSwitchBrightness:true,
+        gSwitchVolume:true,
+        gSwitchSpeedX3:true,
+        gSwitchSpeed:true,
+        gSwitchSpeedX3Sigle:false,
+        gSelectToastPos:"middle"
+    },
+    website :{
+
+    }
+};
+var TGUserSetting;
+
+// 黑名单
+var TouchGestureBlackList=[
+    
+];
+
+var TouchGesture={forbidScroll:false,orientationLocked:false,ismobile:false,debug:false};
+var TouchGestureSetting = {volume:true,brightness:true,progress:true,speed:true,SpeedX3:true,SpeedX3single:true,state:true,forbidScrollNFS:false};
+/*
+*    WhiteList format
+*    function container(video_element){
+*       callback(root_element,listen_element，options);
+*       callback(null,null,options);
+*   }
+*   options = {volume:true,brightness:true,progress:true,speed:true,SpeedX3:true,SpeedX3single:true,state:true}
+*/
+var TouchGestureWhiteList={
+    "www.bilibili.com":{
+        container:function(video_element,callback){
+            var parent = video_element.parentElement;
+            if(parent.classList.contains("bpx-player-video-wrap")){
+                if(tg_IsFullscreen()==true){
+                    var root_element = seekGrandParentByClass(parent,"bpx-player-video-area");
+                    var listen_element = seekGrandParentByClass(root_element,"video-container-v1");
+                    // return [root_element,listen_element];
+                    callback(root_element,listen_element,{volume:true,brightness:true,progress:true,speed:true,SpeedX3:true,SpeedX3single:true,state:true});
+                }
+                else{
+                    var root_element = seekGrandParentByClass(parent,"bpx-player-video-area");
+                    var listen_element = seekGrandParentByClass(root_element,"player-wrap");
+                    // return [root_element,listen_element];
+                    callback(root_element,listen_element,{volume:true,brightness:true,progress:true,speed:true,SpeedX3:true,SpeedX3single:true,state:true});
+                }
+            }
+            else{
+                // return null;
+                callback(null,null,{volume:true,brightness:true,progress:true,speed:true,SpeedX3:true,SpeedX3single:true,state:true});
+            }
+        },
+        forbidScrollList:["bilibili-player-dm-tip-wrap"]
+    },
+    "m.bilibili.com":{
+        container:function(video_element,callback){
+            var parent = video_element.parentElement;
+            if(parent.classList.contains("mplayer-video-wrap")){
+                var root_element = seekGrandParentByClass(parent,"mplayer");
+                // return [root_element,listen_element];
+                callback(root_element,root_element,{volume:true,brightness:true,progress:true,speed:true,SpeedX3:true,SpeedX3single:true,state:true});
+            }
+            else{
+                // return null;
+                callback(null,null,{volume:true,brightness:true,progress:true,speed:true,SpeedX3:true,SpeedX3single:true,state:true});
+            }
+        },
+        forbidScrollList:["player-mobile-display","mplayer-display"]
+    },
+    "weibo.com":{
+        container:function(video_element,callback){
+            // return null;
+            callback(null,null,{volume:true,brightness:true,progress:true,speed:true,SpeedX3:true,SpeedX3single:true,state:true});
+        },
+        forbidScrollList:["wbpv-tech","wbpv-open-layer-button"]
+    },
+    "www.youtube.com":{
+        container:function(video_element,callback){
+            var parent = video_element.parentElement;
+            if(parent.classList.contains("html5-video-container")){
+                // var temp = parent;
+                // while(temp!=null){
+                //     if(temp && temp.id=='player'){
+                //         break;
+                //     }
+                //     temp = temp.parentElement;
+                // }
+                // var root_element;
+                // if(temp!=null){
+                //     root_element = temp;
+                // }
+                // else{
+                //     root_element = parent;
+                // }
+                var root_element = seekGrandParentByClass(parent,"ytd-player");
+                // return [root_element,listen_element];
+                callback(root_element,root_element,{volume:true,brightness:true,progress:true,speed:true,SpeedX3:true,SpeedX3single:true,state:true});
+            }
+            else{
+                // return null;
+                callback(null,null,{volume:true,brightness:true,progress:true,speed:true,SpeedX3:true,SpeedX3single:true,state:true});
+            }
+        },
+        forbidScrollList:["video-stream","ytd-watch-flexy"]
+    },
+    "m.youtube.com":{
+        container:function(video_element,callback){
+            var parent = video_element.parentElement;
+            if(parent.classList.contains("html5-video-container")){
+                var root_element = seekGrandParentByClass(parent,"player-container");
+                var listen_element = null;
+                ytFindListenElement();
+                function ytFindListenElement(){
+                    listen_element = root_element.getElementsByClassName("player-controls-background")[0];
+                    // console.log(root_element);
+                    // console.log(listen_element);
+                    if(listen_element==null){
+                        setTimeout(() => {
+                            ytFindListenElement();
+                        }, 500);
+                    }
+                    else{
+                        callback(root_element,listen_element,{volume:true,brightness:true,progress:true,speed:true,SpeedX3:true,SpeedX3single:true,state:true});
+                        // console.log("callback!");
+                    }
+                }
+
+            }
+            else{
+                // return null;
+                callback(null,null,{volume:true,brightness:true,progress:true,speed:true,SpeedX3:true,SpeedX3single:true,state:true});
+            }
+        },
+        forbidScrollList:["animation-enabled","player-controls-background"]
+    },
+    "v.youku.com":{
+        container:function(video_element,callback){
+            var parent = video_element.parentElement;
+            if(parent.classList.contains("youku-film-player")){
+                var root_element = seekGrandParentByClass(parent,"youku-film-player");
+                // return [root_element,listen_element];
+                callback(root_element,root_element,{volume:true,brightness:true,progress:true,speed:true,SpeedX3:true,SpeedX3single:true,state:true});
+            }
+            else if(parent.classList.contains("video-layer")){
+                var root_element = seekGrandParentByClass(parent,"youku-player");
+                // return [root_element,listen_element];
+                callback(root_element,root_element,{volume:true,brightness:true,progress:true,speed:true,SpeedX3:true,SpeedX3single:true,state:true});
+            }
+            else{
+                // return null;
+                callback(null,null,{volume:true,brightness:true,progress:true,speed:true,SpeedX3:true,SpeedX3single:true,state:true});
+            }
+        },
+        forbidScrollList:["yk-trigger-layer","kui-dashboard-display-panel","kui-message-information"]
+    },
+    "www.facebook.com":{
+        container:function(video_element,callback){
+            // return null;
+            callback(null,null,{volume:true,brightness:true,progress:true,speed:true,SpeedX3:true,SpeedX3single:true,state:true});
+        },
+        forbidScrollList:["i09qtzwb"]
+    },
+    "v.qq.com":{
+        container:function(video_element,callback){
+            var parent = video_element.parentElement;
+            if(parent.classList.contains("txp_video_container")){
+                var root_element = seekGrandParentByClass(parent,"txp_player");
+                // return [root_element,listen_element];
+                callback(root_element,root_element,{volume:true,brightness:true,progress:true,speed:true,SpeedX3:true,SpeedX3single:true,state:true});
+            }
+            else{
+                // return null;
+                callback(null,null,{volume:true,brightness:true,progress:true,speed:true,SpeedX3:true,SpeedX3single:true,state:true});
+            }
+        },
+        forbidScrollList:["txp_shadow","plugin_ctrl_txp_shadow"]
+    }
+
+};
+
+
+var CustomizedVideoTAG = {
+    "www.bilibili.com":["bwp-video"]
+};
+
+
+
+function seekGrandParentByClass(child,parentClass){
+    var temp = child;
+    while(temp!=null){
+        if(temp.classList!=null && temp.classList.contains(parentClass)){
+            return temp;
+        }
+        temp = temp.parentElement;
+    }
+    return null;
+}
+
+var forbidScrollList=[];
+
+TouchGesture.VideoGesture=function(videoElement){
+    this.touchDownPt=null; //触摸按下时得位置
+    this.touchDownTime = 0;
+    this.touchStartPt=null; //顺着一定方向滑动时并触发功能，开始计算的点
+    
+    this.sweepDir=0; //0:no sweep 1:up 2:down 3:left 4:right
+    this.startTouchVideoTime; 
+    this.startTouchVideoVolume;
+    this.touchResult=0; //触摸结果暂存
+    this.startTouchFingers=0; //在触发功能前触摸点数
+    this.originalPlayrate=1; //视频原本的播放速率
+    //this.bodyPosition="";
+    this.videoBrightness=1;
+    this.startTouchBrightness=1;
+   this.isSpeedX3Active = false;
+    this.fullscreenListenersActive = false;
+    this._videoSrcStore=null;
+    this._videoElement=videoElement;//对象video标签
+    this._videoElementAbLeft=0; //video标签相对页面的left
+    this._elementFrame=null;//文字显示的框架
+    this._toastText=null; //文字显示
+
+    this._containElement=null; //_elementFrame的父级
+    this._eventListenElement=null;//监听触摸动作的元素
+
+    this._options = TouchGestureSetting;
+    this._contextMenuFunc = document.oncontextmenu;
+
+    this._fullScreenNow=tg_IsFullscreen();
+    if(this._videoElement.style.filter=="" || this._videoElement.style.filter==null)
+        this._videoElement.style.filter = "brightness(1)";
+    // console.log("_fullScreenNow:"+this._fullScreenNow);
+
+    // console.log(TouchGestureWhiteList);
+    // console.log(TouchGestureWhiteList["www.bilibili.com"]!=null);
+
+    var self = this;
+
+    self.createDom();
+    self.findBestRoot(function(root_element,listen_element){
+        self.applyDom();  
+        
+        // video内地址更改时，重新设置页面(针对bilibili连续播放)
+        self._videoElement.addEventListener('play', function () { //播放开始执行的函数
+            if(self._videoSrcStore == null){
+                // alert("first play");
+                self._videoSrcStore=self._videoElement.src;
+
+            }else if(self._videoElement.src!=self._videoSrcStore){
+                // alert("replay");
+                self.restoreDom();
+                self.findBestRoot(function(root_element,listen_element){
+                    self.applyDom();
+                });
+                
+            }
+        });
+    });
+      
+
+};
+
+// 产生显示元素
+TouchGesture.VideoGesture.prototype.createDom = function(parentElement) {
+    var toastDiv = document.createElement("div");
+    var toastText = document.createElement("span");
+
+    toastDiv.appendChild(toastText);
+    toastDiv.classList.add("TouchGesture_Toast");
+    toastText.classList.add("TouchGesture_ToastText");
+
+    toastDiv.style.display = "none";
+
+    this._elementFrame = toastDiv;
+    this._toastText = toastText;
+
+    this._elementFrame.classList.add("TouchGestureForbidScroll");
+    this._toastText.classList.add("TouchGestureForbidScroll");
+
+    this._touchStartHandler = this.onTouchStart.bind(this);
+    this._touchEndHandler = this.onTouchEnd.bind(this);
+    this._touchMoveHandler = this.onTouchMove.bind(this);
+    this._windowResizeHandeler = this.fullScreenDetect.bind(this);
+    window.addEventListener("resize", this._windowResizeHandeler, "false");
+};
+
+
+// 找到显示元素最佳的parent及监听元素
+TouchGesture.VideoGesture.prototype.findBestRoot=function(callback){
+    var self=this;
+    var targetElement=this._videoElement;
+    var hostDomain=window.location.host;
+    var defaultSetting=TouchGestureWhiteList[hostDomain];
+    var defaultSettingSuccess=false;
+    if(defaultSetting!=null){
+        // console.log("defaultSetting!=null");
+        defaultSetting.container(this._videoElement,function(root_element,listen_element,options){
+            if(root_element!=null&&listen_element!=null){
+                self._containElement=root_element;
+                self._eventListenElement=listen_element;
+                defaultSettingSuccess = true;
+            }
+            else{
+                self.findBestRootByParent();
+            }
+            if(options!=null){
+                for(var key in self._options){
+                    self._options[key] = TouchGestureSetting[key] && options[key];
+                }
+            }
+            callback(self._containElement,self._eventListenElement);
+        });
+
+    }
+    else{
+        self.findBestRootByParent();
+        callback(self._containElement,self._eventListenElement);
+    }
+
+    
+
+
+};
+
+
+
+TouchGesture.VideoGesture.prototype.findBestRootByParent=function(){
+    var self=this;
+    var targetElement=this._videoElement;
+    var elementInFullScreen = false;
+    if(self._fullScreenNow == true){
+        var temp = targetElement;
+        while(temp != null){
+            if(temp == document.fullscreenElement){
+                elementInFullScreen = true;
+                break;
+            }
+            // console.log(temp);
+            temp = temp.parentElement;
+        }
+    }
+    // console.log("video in fullsceen");
+    // console.log(elementInFullScreen);
+
+    if(elementInFullScreen==false){
+        targetElement=targetElement.parentElement;
+        var topest=false;
+        while(!topest){
+            // targetElement.classList.add("TouchGestureForbidScroll");
+            var temp=targetElement.parentElement;
+            var size1=targetElement.offsetWidth*targetElement.offsetHeight;
+            var size2=temp.offsetWidth*temp.offsetHeight;
+            if(temp.offsetWidth>=targetElement.offsetWidth&&temp.offsetHeight>=targetElement.offsetHeight&&size2/size1<=1.2){
+                targetElement=temp;
+            }else{
+                topest=true;
+            }
+            if(temp.tagName.toLowerCase()=="body"){
+                break;
+            }
+        }
+        self._containElement=targetElement;
+        self._eventListenElement=targetElement;
+    }else{
+        // alert("FULLSCREEN!");
+        if(document.fullscreenElement!=null){
+            self._containElement=document.fullscreenElement;
+            self._eventListenElement=document.fullscreenElement;
+            // // delete other toast for other video under fullscreen
+            // if(self._containElement!=null){
+            //     var toasts = self._containElement.getElementsByClassName("TouchGesture_Toast");
+            //     toasts.forEach(t => {
+            //         self._containElement.removeChild(t);
+            //     });
+            // }
+        }
+    }
+}
+// TouchGesture.findFullScreenRoot=function(){
+
+// };
+
+TouchGesture.VideoGesture.prototype.simMouseMoveDock = function() {
+    if (this.touchDownPt == null)
+        return;
+
+    var self = this;
+    var moveCount = 0; // 이동 카운트 초기화
+    var interval = setInterval(function() {
+        var aEvent = new MouseEvent('mousemove', {
+            view: document.defaultView,
+            bubbles: true,
+            cancelable: false,
+            clientX: self._videoElement.clientWidth / 2 + Math.floor(Math.random() * 20),
+            clientY: self._videoElement.clientHeight * 1.5
+        });
+
+        var bEvent = new MouseEvent('mousemove', {
+            view: document.defaultView,
+            bubbles: true,
+            cancelable: false,
+            clientX: self._videoElement.clientWidth / 2 - Math.floor(Math.random() * 20),
+            clientY: self._videoElement.clientHeight * 0.5
+        });
+
+        // a -> b로 이동
+        self._videoElement.dispatchEvent(aEvent);
+        self._videoElement.dispatchEvent(bEvent);
+        // b -> a로 다시 이동
+        self._videoElement.dispatchEvent(aEvent);
+        self._videoElement.dispatchEvent(bEvent);
+
+        moveCount += 1; // 이동 카운트 증가
+
+        if (moveCount >= 500) { // 3초 동안 반복
+            clearInterval(interval); // 반복 중지
+        }
+    }, 5); // 1초 간격으로 반복
+};
+
+
+TouchGesture.VideoGesture.prototype.simMouseMoveCenter=function(){
+    var self=this;
+    var event = new MouseEvent('mousemove', {
+        view: document.defaultView,
+        bubbles: true,
+        cancelable: false,
+        clientX:self._videoElement.clientWidth/2,
+        clientY:self._videoElement.clientHeight/2
+    });
+    self._videoElement.dispatchEvent(event);
+};
+
+// 触摸开始
+TouchGesture.VideoGesture.prototype.onTouchStart = function(e) {
+    if (!tg_IsFullscreen()) {
+        return;
+    }
+
+    const MIN_DISTANCE_RATIO = 0.01; // 화면 너비의 비율로 최소 거리 계산
+    const MIN_DISTANCE = window.innerWidth * MIN_DISTANCE_RATIO;
+    const DOUBLE_TAP_DELAY = 300; // 더블탭 감지 지연 시간
+    const TAP_REGION_RATIO_LEFT = 0.35; // 왼쪽 더블탭 영역 비율
+    const TAP_REGION_RATIO_RIGHT = 0.35; // 오른쪽 더블탭 영역 비율
+   
+
+    // 터치 시작 위치를 얻습니다.
+    var touchStartX = e.touches[0].clientX;
+
+    if (this.hideToastTimeout) {
+        clearTimeout(this.hideToastTimeout);
+        this.hideToastTimeout = null; // 타이머 초기화
+    }
+
+    if (this._videoElement.src.length <= 2) {
+        return;
+    }
+
+    this.setElementLayout(TGUserSetting.global.gSelectToastPos);
+    this.startTouchFingers = e.touches.length;
+
+// 더블탭 감지 코드 제거
+// 기존 코드
+ if (this.startTouchFingers == 1) {
+     var currentTime = new Date().getTime();
+     if (currentTime - this.lastTapTime < DOUBLE_TAP_DELAY) {
+        var touchX = e.touches[0].clientX;
+        var playerRect = this._videoElement.getBoundingClientRect();
+         var playerWidth = playerRect.width; // 플레이어의 너비
+        var playerLeft = playerRect.left; // 플레이어의 왼쪽 좌표
+
+        if (touchX < playerLeft + playerWidth * TAP_REGION_RATIO_LEFT) {
+//             // 왼쪽 40% 더블탭: 10초 뒤로
+             this._videoElement.currentTime = Math.max(this._videoElement.currentTime - 10, 0);
+         } else if (touchX > playerLeft + playerWidth * (1 - TAP_REGION_RATIO_RIGHT)) {
+//             // 오른쪽 40% 더블탭: 10초 앞으로
+            this._videoElement.currentTime = Math.min(this._videoElement.currentTime + 10, this._videoElement.duration);
+        } else {
+//             // 가운데 20% 더블탭: 재생/일시정지
+            if (this._videoElement.paused) {
+               this._videoElement.play();
+             } else {
+                 this._videoElement.pause();
+         }
+         } 
+         this.touchDownPt = null;                           
+         this.startTouchFingers = 0; 
+        this.cancelTouch();
+         return;
+    }
+     this.lastTapTime = currentTime;
+ }
+
+
+    if (this.startTouchFingers == 2) {
+        var dis = Math.sqrt((e.touches[0].clientX - e.touches[1].clientX) * (e.touches[0].clientX - e.touches[1].clientX) +
+                            (e.touches[0].clientY - e.touches[1].clientY) * (e.touches[0].clientY - e.touches[1].clientY));
+        if (dis < MIN_DISTANCE) {
+            this.touchDownPt = null;
+            this.startTouchFingers = 0;
+            this.cancelTouch();
+            return;
+        }
+
+        // 핀치 줌 초기 거리 저장
+        this.startPinchDistance = dis;
+        this.startPinchScale = this.currentScale || 1; // 현재 스케일을 저장, 기본값은 1
+    }
+
+    if (this.startTouchFingers > 0) {
+this.simMouseMoveDock();
+this.simMouseMoveCenter();
+        this.originalPlayrate = this._videoElement.playbackRate;
+        var self = this;
+
+        setTimeout(() => {
+            if (self.touchDownPt != null && self.sweepDir == 0 &&
+                new Date().getTime() - self.lastTapTime >= DOUBLE_TAP_DELAY) {
+
+                // 비디오 엘리먼트의 크기와 위치를 얻습니다.
+                var rect = self._videoElement.getBoundingClientRect();
+
+                // 비디오 엘리먼트의 좌우 5% 영역을 계산합니다.
+                var thresholdHeight = rect.height * 0.1;
+                var thresholdWidth = rect.width * 0.1;
+                const touchX = e.touches[0].clientX; - rect.left;
+                const touchY = e.touches[0].clientY; - rect.top;
+
+                // 터치가 비디오 엘리먼트의 좌우 5% 영역 내에 있는지 확인합니다.
+                if (touchX <= thresholdWidth || touchX >= rect.width - thresholdWidth ||
+                    touchY <= thresholdHeight || touchY >= rect.height - thresholdHeight) {
+                    // 이 영역에서는 3배속 재생을 무시합니다.
+                    return;
+                }
+
+                if (self.startTouchFingers == 1) {
+                    self.setElementLayout("top");
+                    if (self._options.SpeedX3 == true) {
+                        self._videoElement.playbackRate = 3.0;
+                        self.setToast('3X<b>>>></b>', undefined, undefined, false, false, true);
+                        self._toastText.classList.add("toast_blink");
+                        self.sweepDir = -1;
+                        self.isSpeedX3Active = true;
+                    }
+                }
+            }
+        }, 1000); // 롱터치로 간주되는 시간 설정 (1000ms)
+
+// 세 손가락 터치 시
+if (this.startTouchFingers == 3) {
+    // 현재 터치 상태를 추적할 변수 설정
+    this.isThreeFingerTouchActive = true;
+
+    // 500ms 지연 후 터치 상태 확인 및 처리
+    setTimeout(() => {
+        // 500ms 동안 터치가 유지되었는지 확인
+        if (this.isThreeFingerTouchActive) {
+            // 롱터치 처리 로직
+            if (tg_IsFullscreen()) {
+                if (this.fullscreenListenersActive) {
+                    // 터치 및 클릭 제한 해제
+                    removeFullscreenEventListeners();
+                    this.setToast('Unlock', undefined, undefined, false, false);
+                } else {
+                    // 터치 및 클릭 제한 적용
+                    addFullscreenEventListeners();
+                    this.setToast('Lock', undefined, undefined, false, false);
+                }
+                // 터치 제한 상태 토글
+                this.fullscreenListenersActive = !this.fullscreenListenersActive;
+            }
+
+            this.simMouseMoveDock();
+        }
+    }, 500); // 500ms 지연 시간 설정
+}
+
+
+        this.touchDownPt = e.touches[0];
+        this.touchDownTime = new Date().getTime();
+        var tor = window.screen.height / 10;
+        if (TouchGesture.ismobile == true && this._fullScreenNow == true &&
+            (this.touchDownPt.pageY < tor || this.touchDownPt.pageY > window.screen.height - tor)) {
+            this.cancelTouch();
+        }
+
+        var ableft = this._videoElement.offsetLeft;
+        var temp = this._videoElement.offsetParent;
+        while (temp != null) {
+            ableft += temp.offsetLeft;
+            temp = temp.offsetParent;
+        }
+        this._videoElementAbLeft = ableft;
+    } else {
+        this.cancelTouch();
+    }
+};
+
+
+TouchGesture.VideoGesture.prototype.onTouchMove = function(e) {
+  if (!tg_IsFullscreen()) {
+        return;
+    }
+
+   if (this.startTouchFingers == 1) {
+    var touchPt = e.touches[0];
+    var delX = touchPt.clientX - this.touchDownPt.clientX;
+    var delY = touchPt.clientY - this.touchDownPt.clientY;
+
+    if (this.sweepDir == 0) {
+        // 방향 결정 로직
+        var radius = Math.sqrt(delX * delX + delY * delY);
+        var w = this._videoElement.offsetWidth, h = this._videoElement.offsetHeight;
+        var judge = Math.sqrt(w * w + h * h) / 30;
+        if (radius > judge) {
+            if (Math.abs(delX) > Math.abs(delY)) {
+                if (delX > 0)
+                    this.sweepDir = 4; // 오른쪽
+                else
+                    this.sweepDir = 3; // 왼쪽
+            } else {
+                if (delY > 0)
+                    this.sweepDir = 2; // 아래
+                else
+                    this.sweepDir = 1; // 위
+            }
+            this.startTouchVideoTime = Math.floor(this._videoElement.currentTime);
+            this.startTouchVideoVolume = this._videoElement.volume;
+            this.startTouchBrightness = this.videoBrightness;
+            this.touchStartPt = touchPt;
+           this.playPauseTriggered = false; // 스와이프 시작 시 플래그 리셋
+        }
+    } else if (this._options.progress == true && (this.sweepDir == 3 || this.sweepDir == 4)) {
+        this.showProgressBar();
+        delX = touchPt.clientX - this.touchStartPt.clientX;
+        var delXRatio = delX / this._videoElement.offsetWidth;
+        var duration = this._videoElement.duration;
+        if (isNaN(duration)) {
+            duration = 1800; // 기본 재생 시간 설정
+        }
+
+        if (Math.abs(delXRatio) < 0.5) {
+            this.touchResult = Math.floor(delXRatio * 240);
+        } else {
+            if (delXRatio > 0)
+                this.touchResult = Math.floor((Math.pow(10000, delXRatio - 0.5) - 1) / 50 * duration + delXRatio * 240);
+            else
+                this.touchResult = Math.floor(-(Math.pow(10000, -delXRatio - 0.5) - 1) / 50 * duration + delXRatio * 240);
+        }
+
+        // 이동 시간이 현재 시간을 넘지 않도록 제한
+        var newTime = this.startTouchVideoTime + this.touchResult;
+        if (newTime > duration) {
+            this.touchResult = Math.floor(duration - this.startTouchVideoTime); // 총 시간을 넘지 않도록 수정
+        }
+
+        if (Math.abs(this.touchResult) < 30) {
+            if (this.touchResult >= 0) {
+                this.touchResult = Math.ceil(this.touchResult / 30) * 10;
+            } else {
+                this.touchResult = Math.floor(this.touchResult / 30) * 10;
+            }
+            this.hideToast();
+        } else {
+            var absResult = Math.abs(this.touchResult);
+            var offsetHours = Math.floor(absResult / 3600);
+            var offsetMinutes = Math.floor((absResult % 3600) / 60);
+            var offsetSeconds = absResult % 60;
+            var offsetValStr = (offsetHours > 0 ? offsetHours + ":" : "") + (offsetMinutes < 10 ? '0' + offsetMinutes : offsetMinutes) + ":" + (offsetSeconds < 10 ? '0' + offsetSeconds : offsetSeconds);
+
+            if (this.touchResult > 0) {
+                var newTime = Math.floor(Math.min(this.startTouchVideoTime + this.touchResult, duration)); // 총 시간을 넘지 않도록 제한
+                this.setToast(seconds2TimeStr(newTime) + "  (+" + offsetValStr + ")", newTime, duration, true, false);
+            } else {
+                if (this.startTouchVideoTime + this.touchResult <= 0) {
+                    var moveTime = -this.startTouchVideoTime;
+                    var offsetTimeStr = seconds2TimeStr(moveTime);
+                    this.setToast(seconds2TimeStr(0)  + "  (" + offsetTimeStr + ")", 0, duration, true, false);
+                } else {
+                    var newTime = Math.floor(this.startTouchVideoTime + this.touchResult);
+                    this.setToast(seconds2TimeStr(newTime) + "  (-" + offsetValStr + ")", newTime, duration, true, false);
+                }
+            }
+        }
+    
+        } else if (this.sweepDir == 1 || this.sweepDir == 2) {
+            this.hideProgressBar();
+             var delY = touchPt.clientY - this.touchStartPt.clientY; // 스와이프의 세로 거리 계산
+              var threshold = 50; // 스와이프가 유효하다고 간주할 최소 거리 (픽셀 단위)
+
+            // 밝기 또는 볼륨 조절 로직
+            if (this.touchStartPt.clientX < this._videoElement.clientWidth * 0.35) {
+                if (this._options.brightness == true) {
+                    delY = touchPt.clientY - this.touchStartPt.clientY;
+                    var plus = -delY / this._videoElement.offsetHeight * 4;
+                    this.touchResult = this.startTouchBrightness + plus;
+                    if (this.touchResult < 0) this.touchResult = 0;
+                    else if (this.touchResult > 1) this.touchResult = 1;
+                    this.videoBrightness = this.touchResult;
+                    var realBrightness = Math.sqrt(this.touchResult) * 0.85 + 0.15;
+                    this._videoElement.style.filter = "brightness(" + realBrightness + ")";
+                    this.setToast("&#x2600;&nbsp;" + Math.floor(this.touchResult * 100) + "%", undefined, undefined, false, false);
+                }
+            } else if (this.touchStartPt.clientX > this._videoElement.clientWidth * 0.65)  {
+                if (this._options.volume == true) {
+                    delY = touchPt.clientY - this.touchStartPt.clientY;
+                    var plus = -delY / this._videoElement.offsetHeight * 4;
+                    this.touchResult = this.startTouchVideoVolume + plus;
+                    if (this.touchResult < 0) this.touchResult = 0;
+                    else if (this.touchResult > 1) this.touchResult = 1;
+                    this._videoElement.volume = this.touchResult;
+                    this.setToast("&#x266b;&nbsp;" + Math.floor(this.touchResult * 100) + "%", undefined, undefined, false, false);
+                }
+            } else { // 가운데 20%
+                if (Math.abs(delY) > Math.abs(delX) && Math.abs(delY) > threshold) {
+                    if (!this.playPauseTriggered) { // 플래그 확인
+                        if (this._videoElement.paused) {
+                            this._videoElement.play();
+                        } else {
+                            this._videoElement.pause();
+                        }
+                        this.playPauseTriggered = true; // 플래그 설정
+                    }
+                }
+            }
+        }
+    } else if (this.startTouchFingers == 2) {
+    // 핀치 줌 기능 추가
+    var touch1 = e.touches[0];
+    var touch2 = e.touches[1];
+
+    // 두 손가락의 현재 좌표
+    var x1 = touch1.clientX;
+    var y1 = touch1.clientY;
+    var x2 = touch2.clientX;
+    var y2 = touch2.clientY;
+
+    // 이전 프레임의 좌표가 존재하는 경우 계산
+    if (this.prevTouches) {
+        var prevX1 = this.prevTouches[0].clientX;
+        var prevY1 = this.prevTouches[0].clientY;
+        var prevX2 = this.prevTouches[1].clientX;
+        var prevY2 = this.prevTouches[1].clientY;
+
+        // 각 손가락의 이동 방향 계산
+        var direction1 = { x: x1 - prevX1, y: y1 - prevY1 };
+        var direction2 = { x: x2 - prevX2, y: y2 - prevY2 };
+
+        // 벡터 크기 계산
+        var magnitude1 = Math.sqrt(direction1.x * direction1.x + direction1.y * direction1.y);
+        var magnitude2 = Math.sqrt(direction2.x * direction2.x + direction2.y * direction2.y);
+
+        // 벡터 간의 내적을 계산
+        var dotProduct = direction1.x * direction2.x + direction1.y * direction2.y;
+
+        // 벡터 간의 각도를 계산합니다 (라디안 단위)
+        var cosTheta = dotProduct / (magnitude1 * magnitude2);
+
+        // cosTheta를 -1과 1 사이로 클램핑
+        cosTheta = Math.max(-1, Math.min(1, cosTheta));
+
+        // 라디안을 도로 변환
+        var theta = Math.acos(cosTheta) * (180 / Math.PI);
+
+        // 핀치 줌 판단: 벡터 간의 각도가 60도 이상인 경우
+        var isPinchZooming = theta >= 60;
+        // 스와이프 판단: 벡터 간의 각도가 10도 이하인 경우
+        var isSwiping = theta < 10;
+
+        // 핀치 줌 기능이 동작 중일 때 스와이프 동작을 무효화
+        if (isPinchZooming) {
+            // 스와이프 동작이 시작된 경우 리턴하여 무효화
+            if (this.sweepDir > 0) return;
+
+            // 두 손가락 사이의 거리 계산
+            var deltaX = x2 - x1;
+            var deltaY = y2 - y1;
+            var distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+            if (this.startPinchDistance === undefined) {
+                // 처음 핀치 동작이 시작될 때 초기 거리 설정
+                this.startPinchDistance = distance;
+                this.startPinchScale = this.currentScale || 1.0;
+            } else if (this.startPinchDistance !== undefined && this.sweepDir == 0) {
+                this.hideProgressBar();
+
+                // 초기 거리와 현재 거리 비교하여 확대/축소 비율 계산
+                var scaleChange = distance / this.startPinchDistance;
+                // 감도 조절 (1/2로 줄임)
+                scaleChange = (scaleChange - 1) / 2 + 1;
+
+                // 비디오 확대/축소 적용
+                var newScale = this.startPinchScale * scaleChange;
+
+                // 확대 비율을 100% ~ 300% 범위로 제한
+                newScale = Math.max(1.0, Math.min(newScale, 3.0));
+                this._videoElement.style.transform = `scale(${newScale})`;
+                this.currentScale = newScale;
+
+                // 확대 비율을 퍼센트로 표시 (정수로만 표시)
+                var scalePercent = Math.round(newScale * 100);
+                this.setToast(`${scalePercent}%`, undefined, undefined, false, true);
+            }
+        }
+    }
+
+    // 현재 터치 좌표를 다음 프레임을 위해 저장
+    this.prevTouches = [touch1, touch2];
+
+    // 현재 거리 저장
+    this.lastDistance = distance;
+    
+    // 기존 속도 조절 기능 유지
+    this.hideProgressBar(); 
+    var delX = touch1.clientX - this.touchDownPt.clientX;
+    var delY = touch1.clientY - this.touchDownPt.clientY;
+
+    // 스위프 기능 구현
+    if (this.sweepDir == 0) {
+        var radius = Math.sqrt(delX * delX + delY * delY);
+        var w = this._videoElement.offsetWidth, h = this._videoElement.offsetHeight;
+        var judge = Math.sqrt(w * w + h * h) / 30;
+
+        if (radius > judge) {
+            if (Math.abs(delX) > Math.abs(delY)) {
+                this._videoElement.playbackRate = this.originalPlayrate;
+                if (delX > 0)
+                    this.sweepDir = 4; // 오른쪽 스위프
+                else
+                    this.sweepDir = 3; // 왼쪽 스위프
+            } else {
+                if (delY > 0)
+                    this.sweepDir = 2; // 아래로 스위프
+                else
+                    this.sweepDir = 1; // 위로 스위프
+            }
+            this.touchStartPt = touch1;
+        }
+    } else if ((this.sweepDir == 1 || this.sweepDir == 2 || this.sweepDir == 3 || this.sweepDir == 4) && isSwiping) {
+        // 핀치 줌 중 동작을 무효화
+         if (isPinchZooming) return;
+
+        this.hideProgressBar();
+
+        
+        if (this._options.speed == true) {
+            if (this.sweepDir == 1 || this.sweepDir == 2) { // 수직 스와이프
+                delY = touch1.clientY - this.touchStartPt.clientY; // 수직 거리 계산
+                this.touchResult = this.originalPlayrate - Math.floor((delY / this._videoElement.offsetHeight) * 70) * 0.05; // 수직 거리 기반 재생 속도 조정
+            } else if (this.sweepDir == 3 || this.sweepDir == 4) { // 수평 스와이프
+                delX = touch1.clientX - this.touchStartPt.clientX; // 수평 거리 계산
+                this.touchResult = this.originalPlayrate + Math.floor((delX / this._videoElement.offsetWidth) * 50) * 0.05; // 수평 거리 기반 재생 속도 조정
+            }
+
+            if (this.touchResult > 0.9 && this.touchResult < 1.1) {
+                this.touchResult = 1;
+          
+                }
+
+                if (this.touchResult > 4) this.touchResult = 4;
+                if (this.touchResult < 0.1) this.touchResult = 0.1;
+                this.setToast(this.touchResult.toFixed(2) + "X", undefined, undefined, false, false);
+            }
+        }
+    }
+
+    if (this.hideToastTimeout) {
+        clearTimeout(this.hideToastTimeout);
+    }
+    this.hideToastTimeout = setTimeout(() => {
+        this.hideToast();
+    }, 500);
+};
+
+
+
+
+TouchGesture.VideoGesture.prototype.onTouchEnd = function(e) {
+
+this.isThreeFingerTouchActive = false;
+
+
+if (!tg_IsFullscreen()) {
+        return;
+    }
+
+    this.touchDownPt = null;
+
+    if (this.touchResult != 0) {
+        if (this.startTouchFingers == 1) {
+            if (this.sweepDir == 3 || this.sweepDir == 4) {
+                if (this._options.progress == true) {
+                    var res = this.startTouchVideoTime + this.touchResult;
+                    this._videoElement.currentTime = res;
+                }
+            }
+        } else if (this.startTouchFingers == 2) {
+            if (this.sweepDir == 1 || this.sweepDir == 2 || this.sweepDir == 3 || this.sweepDir == 4) {
+                if (this._options.speed == true) {
+                    this._videoElement.playbackRate = this.touchResult;
+                    this.originalPlayrate = this.touchResult;
+                }
+            }
+        }
+    }
+
+    this.sweepDir = 0;
+    this.touchResult = 0;
+    this._videoElement.playbackRate = this.originalPlayrate;
+
+   
+
+    // 3배속 모드가 끝났을 때 플래그 해제
+    if (e.touches.length < 1) {
+        this.isSpeedX3Active = false;
+    }
+
+    // 핀치 줌 관련 초기화
+    if (this.startTouchFingers == 2) {
+        this.startPinchDistance = undefined;
+    }
+
+   
+  
+
+    if (this.hideToastTimeout) {
+        clearTimeout(this.hideToastTimeout);
+    }
+
+    if (this.startTouchFingers >= 1 && !this.isSpeedX3Active) {
+        this.hideToastTimeout = setTimeout(() => {
+            this.hideToast();
+        }, 500);
+    }
+};
+
+
+TouchGesture.VideoGesture.prototype.init = function() {
+    this.currentScale = 1;
+    // 기존 초기화 로직 유지
+    // ...
+};
+
+// 초기화 메서드 호출
+TouchGesture.VideoGesture.prototype.init();
+
+
+// 启动监听
+TouchGesture.VideoGesture.prototype.applyDom = function(videoElement) {
+    this._containElement.appendChild(this._elementFrame);
+
+    var temp = this._videoElement;
+    while (temp != this._eventListenElement && temp != null) {
+        if (temp.classList != null)
+            temp.classList.add("TouchGestureForbidScroll");
+        temp = temp.parentElement;
+    }
+    this._eventListenElement.classList.add("TouchGestureForbidScroll");
+
+    this._eventListenElement.addEventListener("touchstart", this._touchStartHandler, false);
+    this._eventListenElement.addEventListener("touchend", this._touchEndHandler, false);
+    this._eventListenElement.addEventListener("touchmove", this._touchMoveHandler, false);
+};
+
+
+// Resize时恢复元素原样，取消事件监听
+TouchGesture.VideoGesture.prototype.restoreDom=function(){
+    if(this._containElement!=null){
+        this._containElement.appendChild(this._elementFrame);
+        // this._containElement.removeChild(this._elementFrame);
+    }
+
+    var temp=this._videoElement;
+    while(temp!=this._eventListenElement){
+        if(temp.classList!=null)
+            temp.classList.remove("TouchGestureForbidScroll");
+        temp=temp.parentElement;
+        if(temp == null)
+            break;
+    }
+    if(this._eventListenElement==null)
+        return;
+    this._eventListenElement.classList.remove("TouchGestureForbidScroll");
+
+    this._eventListenElement.removeEventListener("touchstart",this._touchStartHandler);
+    this._eventListenElement.removeEventListener("touchend",this._touchEndHandler);
+    this._eventListenElement.removeEventListener("touchmove",this._touchMoveHandler);
+};
+
+TouchGesture.VideoGesture.prototype.fullScreenDetect = function() {
+    var self = this;
+
+    var fullScreenState = tg_IsFullscreen();
+    if (fullScreenState != this._fullScreenNow) {
+        this._fullScreenNow = fullScreenState;
+        this.restoreDom();
+        this.findBestRoot(function(root_element, listen_element) {
+            self.applyDom();
+            if (fullScreenState == true) {
+                // 전체화면 진입 시 터치 및 클릭 제한 해제(LOCK)로 시작
+                self._elementFrame.style.position = "fixed";
+                self.simMouseMoveCenter();
+                addFullscreenEventListeners(); // 기본적으로 LOCK 상태
+                self.fullscreenListenersActive = true; // 터치 제한 활성화 (LOCK 상태로 시작)
+
+                this.setToast('lock', undefined, undefined, false, false); // LOCK 상태 메시지 출력
+            } else {
+                self._elementFrame.style.position = "absolute";
+                removeFullscreenEventListeners(); // 전체화면 종료 시에도 UNLOCK 상태 유지
+                self.fullscreenListenersActive = false; // 터치 제한 비활성화
+            }
+        });
+    }
+
+    if (fullScreenState == true && this.videoInFullscreenElement()) {
+        if (this._videoElement.videoWidth / this._videoElement.videoHeight > 1.3) {
+            if (TouchGesture.orientationLocked == false && TouchGesture.ismobile == true) {
+                TouchGesture.orientationLocked = true;
+                setTimeout(() => {
+                    screen.orientation.lock("landscape");
+                }, 300);
+            }
+        }
+    } else if (fullScreenState == false) {
+        TouchGesture.orientationLocked = false;
+        screen.orientation.unlock();
+    }
+};
+
+
+
+
+// 특정 영역에서만 터치 및 클릭 방지
+const preventDefaultAndStopPropagation = (event) => {
+    const videoElement = document.querySelector('video');
+    if (!videoElement) return;
+
+    const rect = videoElement.getBoundingClientRect();
+    const thresholdHeight = rect.height * 0.1; // 비디오 높이의 10% 경계
+    const thresholdWidth = rect.width * 0.05;  // 비디오 너비의 5% 경계
+
+    const clickX = event.clientX - rect.left;
+    const clickY = event.clientY - rect.top;
+
+    const isInBounds = (
+        clickX <= thresholdWidth || clickX >= rect.width - thresholdWidth ||
+        clickY <= thresholdHeight || clickY >= rect.height - thresholdHeight
+    );
+
+    if (!isInBounds) {
+        event.stopImmediatePropagation();
+        event.preventDefault();
+    }
+};
+
+const addFullscreenEventListeners = () => {
+    document.addEventListener('click', preventDefaultAndStopPropagation, true);
+    document.addEventListener('contextmenu', preventDefaultAndStopPropagation, true);
+};
+
+const removeFullscreenEventListeners = () => {
+    document.removeEventListener('click', preventDefaultAndStopPropagation, true);
+    document.removeEventListener('contextmenu', preventDefaultAndStopPropagation, true);
+};
+
+
+// TouchGesture.VideoGesture.prototype.onOrientationChange=function(){
+//     var self = this;
+
+// };
+
+
+TouchGesture.VideoGesture.prototype.videoInFullscreenElement=function(){
+    var temp = this._videoElement;
+    while(temp!=null && temp!=document.body){
+        if(temp == document.fullscreenElement)
+            return true;
+        temp = temp.parentElement;
+    }
+};
+
+//自动调节DIV元素位置
+TouchGesture.VideoGesture.prototype.setElementLayout=function(pos){
+    var videoTarget=this._containElement;
+    var vw=videoTarget.offsetWidth,vh=videoTarget.offsetHeight;
+    var w=vw/5;
+    //var h=vh/8;
+    var h=w/3;
+    var x=(vw-w)/2+videoTarget.offsetLeft;
+    var y;
+    if(pos == "bottom"){
+        y= vh*7/8-h/2+videoTarget.offsetTop;
+    }else if(pos == "top"){
+        y= vh*1/8-h/2+videoTarget.offsetTop;
+    }
+    else{
+        y= vh/2-h/2+videoTarget.offsetTop;
+    }
+    // console.log("w:"+w," h:"+h+" x:"+x+" y:"+y);
+    this._elementFrame.style.width=w+"px";
+    this._elementFrame.style.height=h+"px";
+    this._elementFrame.style.left=x+"px";
+    this._elementFrame.style.top=y+"px";
+    // this._element.style.display="block";
+    var fontsize=h/3;
+    this._toastText.style.fontSize=fontsize+"px";
+    this._toastText.style.marginTop=(h-fontsize)/2+"px";
+    this._elementFrame.style.display="none";
+    this._elementFrame.style.borderRadius = w/10 +"px";
+
+
+};
+
+
+//显示Toast
+TouchGesture.VideoGesture.prototype.showProgressBar = function() {
+    var existingProgressBar = this._elementFrame.querySelector(".progress-bar-container");
+    if (!existingProgressBar) {
+        var progressBarContainer = document.createElement("div");
+        progressBarContainer.classList.add("progress-bar-container");
+
+        var progress = document.createElement("div");
+        progress.classList.add("progress");
+        progress.style.width = "0%";
+
+        var progressText = document.createElement("span");
+        progressText.classList.add("progress-text");
+        progressText.innerHTML = "0%"; // 초기 진행률
+
+        progress.appendChild(progressText); // 진행 바 내부에 진행률 텍스트 추가
+        progressBarContainer.appendChild(progress);
+
+        // 토스트 메시지 요소에 진행 바 추가
+        this._elementFrame.appendChild(progressBarContainer);
+    } else {
+        existingProgressBar.style.opacity = '1'; // 진행 바가 다시 나타나도록 설정
+        existingProgressBar.style.display = 'block'; // 진행 바가 이미 존재할 경우 표시
+    }
+};
+
+TouchGesture.VideoGesture.prototype.hideProgressBar = function() {
+
+
+    var existingProgressBar = this._elementFrame.querySelector(".progress-bar-container");
+    if (existingProgressBar) {
+        existingProgressBar.style.opacity = '0'; // 서서히 사라지도록 설정
+    }
+};
+
+
+TouchGesture.VideoGesture.prototype.setToast = function(str, currentTime, duration, showProgress = true, isSpeedX3 = false) {
+    if (this.hideToastTimeout) {
+        clearTimeout(this.hideToastTimeout);
+    }
+
+    this._elementFrame.style.display = "block";
+    this._elementFrame.classList.remove("fadeout");
+    this._toastText.innerHTML = str;
+
+    if (showProgress && currentTime !== undefined && duration !== undefined) {
+        this.showProgressBar();
+        // 현재 시간과 이동 시간을 표시할 때 소수점 없이 정수로 변환하여 사용
+        var newTime = Math.floor(Math.min(currentTime, duration));
+        var percentage = Math.floor((newTime / duration) * 100);
+        if (percentage > 100) percentage = 100;
+        var progress = this._elementFrame.querySelector(".progress-bar-container .progress");
+        var progressText = this._elementFrame.querySelector(".progress-bar-container .progress-text");
+        if (progress && progressText) {
+            progress.style.width = percentage + "%";
+            progressText.innerHTML = percentage + "%";
+        }
+    } else {
+        this.hideProgressBar();
+    }
+
+    // 손가락 롱터치 중이 아닐 때만 타이머를 설정하여 토스트를 숨기도록 함
+    if (!isSpeedX3 && !this.isSpeedX3Active) {
+        this.hideToastTimeout = setTimeout(() => {
+            this.hideToast(showProgress, isSpeedX3);
+        }, 500);
+    }
+};
+
+
+
+// hideToast 함수에서 toast_blink 클래스 제거
+TouchGesture.VideoGesture.prototype.hideToast = function(showProgress = false, isSpeedX3 = false) {
+    var self = this;
+    if (isSpeedX3 || this.isSpeedX3Active) {
+        return; // 3배속 모드 상태에서는 숨기지 않음
+    }
+
+    setTimeout(function() {
+        self._elementFrame.classList.add("fadeout");
+
+        var existingProgressBar = self._elementFrame.querySelector(".progress-bar-container");
+        if (existingProgressBar) {
+            existingProgressBar.style.opacity = 0;  // 진행 바 서서히 사라지게 설정
+        }
+
+        setTimeout(function() {
+            self.hideProgressBar(); // 일정 시간 후에 완전히 숨김
+        }, 500);
+    }, 500); 
+};
+
+
+
+
+//在Touchend之前取消手势
+TouchGesture.VideoGesture.prototype.cancelTouch=function(){
+    this.sweepDir=0;
+    this._videoElement.playbackRate=this.originalPlayrate;
+    this.touchDownPt=null;
+    this.hideToast();
+}
+
+
+
+// 检测<video>并插入元素
+TouchGesture.VideoGesture.insertDom=function(dom){
+    var videoTagsNative = dom.getElementsByTagName('video');
+    // console.log(dom);
+    Array.prototype.forEach.call(videoTagsNative, function(videoTag) {
+        if (!videoTag.getAttribute('TouchGesture_Video')) {
+            videoTag.setAttribute('TouchGesture_Video', true);
+            new TouchGesture.VideoGesture(videoTag);
+        //   console.log("insert node");
+        }
+    });
+
+    var hostDomain=window.location.host;
+    if(CustomizedVideoTAG[hostDomain] == null)
+        return;
+
+    CustomizedVideoTAG[hostDomain].forEach(function(videoTagName){
+        var videoTags = dom.getElementsByTagName(videoTagName);
+        // console.log(dom);
+        Array.prototype.forEach.call(videoTags, function(videoTag) {
+            if (!videoTag.getAttribute('TouchGesture_Video')) {
+                videoTag.setAttribute('TouchGesture_Video', true);
+                new TouchGesture.VideoGesture(videoTag);
+            //   console.log("insert node");
+            }
+        });
+    });
+    
+};
+
+TouchGesture.VideoGesture.insertAll=function(){
+    // var self=this;
+    TouchGesture.VideoGesture.insertDom(document);
+
+};
+
+// TouchGesture.VideoGesture.prototype.forbidScroll=function(){
+//     // var bodies=document.getElementsByTagName("body");
+//     // Array.prototype.forEach.call(bodies, function(body) {
+//     //     body.style.position="fixed";
+//     // });
+//     TouchGesture.forbidScroll=true;
+// }
+
+// TouchGesture.VideoGesture.prototype.permitcroll=function(){
+//     // var bodies=document.getElementsByTagName("body");
+//     // Array.prototype.forEach.call(bodies, function(body) {
+//     //     body.style.position="relative";
+//     // });
+//     TouchGesture.forbidScroll=false;
+// }
+
+
+
+function seconds2TimeStr(secs) {
+    var isNegative = secs < 0; // 음수인지 확인
+    secs = Math.abs(Math.floor(secs)); // 절대값으로 변환하고 소수점 버림
+
+    var hour = parseInt(secs / 3600); // 시간을 계산
+    var min = parseInt((secs % 3600) / 60); // 분을 계산
+    var sec = secs % 60; // 초를 계산
+
+    var ret = (isNegative ? "-" : ""); // 음수이면 앞에 '-' 추가
+    if (hour > 0) {
+        ret += hour + ":"; // 시간 추가
+    }
+    ret += (min < 10 ? '0' + min : min) + ":"; // 분을 두 자리 수로 패딩
+    ret += (sec < 10 ? '0' + sec : sec); // 초를 두 자리 수로 패딩
+
+    return ret; // 형식이 적용된 시간 문자열 반환
+}
+
+
+function initForbidScrollList(){
+    var hostDomain=window.location.host;
+    var defaultSetting=TouchGestureWhiteList[hostDomain];
+    if(defaultSetting!=null){
+        if(defaultSetting.forbidScrollList!=null)
+            forbidScrollList=defaultSetting.forbidScrollList;
+        // console.log(forbidScrollList);
+    }
+}
+
+function whetherInBlackList(){
+    var hostDomain=window.location.host;
+    if(TouchGestureBlackList.indexOf(hostDomain)>=0){
+        return true;
+    }
+    return false;
+}
+function tg_IsFullscreen(){
+    return document.fullscreenElement!=null    ||
+           document.msFullscreenElement!=null  ||
+           document.mozFullScreenElement!=null ||
+           document.webkitFullscreenElement!=null ||
+           document.fullscreen == true || false;
+}
+
+function tg_IsMobile(){
+    if(window.navigator.userAgent.match(/(phone|pad|pod|iPhone|iPod|ios|iPad|Android|Mobile|BlackBerry|IEMobile|MQQBrowser|JUC|Fennec|wOSBrowser|BrowserNG|WebOS|Symbian|Windows Phone)/i)) {
+        return true; // 移动端
+    }else if(window.screen.height/window.screen.width>1.3){
+        return true; // 屏幕纵向
+    }else{
+        return false; // PC端
+    }
+}
+
+function tgVideoPageInit(){
+    GM_addStyle('div.TouchGesture_Toast{  width: 200px;  height: 100px;  opacity: 0.75;  position: absolute;  z-index: 2147483648;  top: 100px;  left: 200px;  background-color: black; pointer-events:none;} ');
+    GM_addStyle('span.TouchGesture_ToastText{  position: absolute;  left: 0;  right: 0;  text-align: center;  color: white; pointer-events:none; font-family:-apple-system,BlinkMacSystemFont,Helvetica Neue,Helvetica,Arial,PingFang SC,Hiragino Sans GB,Microsoft YaHei,sans-serif;}');
+    GM_addStyle('div.TouchGesture_Toast.fadeout{  -webkit-transition: all 0.5s; -moz-transition: all 0.5s; -ms-transition: all 0.5s; -o-transition: all 0.5s; transition: all 0.5s; opacity: 0;}');
+   
+    var hostDomain = window.location.host;
+    var glbSetting = TGUserSetting.global;
+    var usrSetting = TGUserSetting.website[hostDomain];
+    var glb = [glbSetting["gSwitchVolume"],glbSetting["gSwitchBrightness"],glbSetting["gSwitchProgress"],glbSetting["gSwitchSpeed"],glbSetting["gSwitchSpeedX3"],glbSetting["gSwitchState"],glbSetting["gSwitchSpeedX3Sigle"]];
+    var usr = [true,true,true,true,true,true,true];
+    // console.log(hostDomain);
+    if(usrSetting!=null){
+        usr = [usrSetting["wSwitchVolume"],usrSetting["wSwitchBrightness"],usrSetting["wSwitchProgress"],usrSetting["wSwitchSpeed"],usrSetting["wSwitchSpeedX3"],usrSetting["wSwitchState"],usrSetting["wSwitchSpeedX3Sigle"]];
+        // console.log("usr setting exist");
+    }
+    
+    TouchGestureSetting["volume"] =  glb[0] && usr[0];
+    TouchGestureSetting["brightness"] =  glb[1] && usr[1];
+    TouchGestureSetting["progress"] =  glb[2] && usr[2];
+    TouchGestureSetting["speed"] =  glb[3] && usr[3];
+    TouchGestureSetting["SpeedX3"] =  glb[4] && usr[4];
+    TouchGestureSetting["state"] =  glb[5] && usr[5];
+    TouchGestureSetting["SpeedX3single"] =  glb[6] && usr[6];
+    TouchGestureSetting["forbidScrollNFS"] =  false;
+    if(usrSetting!=null){
+        TouchGestureSetting["forbidScrollNFS"] =  (usrSetting["wSwitchForbidScrollNFS"]==true);
+    }
+    // console.log("forbidScrollNFS");
+    // console.log(TouchGestureSetting.forbidScrollNFS);
+    
+    // console.log(glb);
+    // console.log(usr);
+
+    initForbidScrollList();
+
+    TouchGesture.ismobile = tg_IsMobile();
+    window.addEventListener('resize',function(e){
+        TouchGesture.ismobile = tg_IsMobile();
+    });
+
+    document.addEventListener('touchstart',function(e){
+        if(forbidScrollList.indexOf(e.srcElement.classList[0])>=0){
+            document.addEventListener('touchmove',this._touchMoveHandler,{passive:false});
+        }else{
+            var noVideo=true;
+            
+            const ev = window.event || e;
+            const path = e.path || (e.composedPath && e.composedPath());
+            // console.log(path);
+
+            for(var i=0;i<path.length;i++){
+                var element=path[i];
+                // console.log(element);
+                if(element.tagName=="VIDEO"||(element.classList&&element.classList.contains("TouchGestureForbidScroll"))){
+                    // TouchGesture.forbidScroll=true;
+                    noVideo=false;
+                    break;
+                }
+            }
+
+            var fs = tg_IsFullscreen();
+            if(fs == false && !noVideo){
+                if(TouchGestureSetting.forbidScrollNFS==false)
+                    document.addEventListener('touchmove',this._touchMoveHandler,{passive:false});
+            }else if(fs){
+                if(!noVideo){
+                    document.addEventListener('touchmove',this._touchMoveHandler,{passive:false});
+                }
+                else if(e.touches[0].pageX>window.screen.width/8&&e.touches[0].pageX<window.screen.width){
+                    document.addEventListener('touchmove',this._touchMoveHandler,{passive:false});
+                }else{
+                }
+            }
+            else{
+            }
+        }
+    });
+
+    document.addEventListener('touchend',function(e){
+        document.removeEventListener('touchmove',tgPreventDefault);
+    });
+    if(TouchGesture.debug == true){
+        document.addEventListener('touchmove',function(e){
+            console.log(e.srcElement.classList);
+        });
+    }
+    TouchGesture.VideoGesture.insertAll();
+    setInterval(TouchGesture.VideoGesture.insertAll, 2000);
+}
+
+function tgPreventDefault(e){
+    e.preventDefault();
+    return false;
+};
+
+function tgSettingPage(){
+    console.log("setting page");
+    var targetDomain = tgGetQueryString("target");
+    console.log(targetDomain);
+    console.log(TGUserSetting);
+    var websiteSetting;
+    if(TGUserSetting.website[targetDomain]){
+        websiteSetting=TGUserSetting.website[targetDomain];
+        // console.log("found");
+    }else{
+        // console.log("not found");
+        websiteSetting={
+            wSwitchEnable:true,
+            wSwitchState:true,
+            wSwitchProgress:true,
+            wSwitchBrightness:true,
+            wSwitchVolume:true,
+            wSwitchSpeedX3:true,
+            wSwitchSpeedX3Sigle:true,
+            wSwitchSpeed:true,
+            wSwitchForbidScrollNFS:false
+        };
+    }
+    
+    $(".g_tgs").each(function(index,ele){
+        var val = TGUserSetting.global[ele.id];
+        if(val!=true){
+            ele.classList.remove("mui-active")
+        }
+    });
+    $("#gSelectToastPos").text(TGUserSetting.global["gSelectToastPos"]);
+
+    $(".w_tgs").each(function(index,ele){
+        var val = websiteSetting[ele.id];
+        if(val!=true){
+            ele.classList.remove("mui-active")
+        }
+    });
+
+    document.getElementById("globalSettingInput").addEventListener("change",function(){
+        var gVal = document.getElementById("globalSettingInput").value;
+        gVal = JSON.parse(gVal);
+        TGUserSetting.global = gVal;
+        GM_setValue("tg_setting",JSON.stringify(TGUserSetting));
+    });
+
+    document.getElementById("websiteSettingInput").addEventListener("change",function(){
+        // alert("change");
+        var wVal = document.getElementById("websiteSettingInput").value;
+        wVal = JSON.parse(wVal);
+        TGUserSetting.website[targetDomain] = wVal;
+        GM_setValue("tg_setting",JSON.stringify(TGUserSetting));
+    });
+
+    document.getElementById("resetSettingInput").addEventListener("change",function(){
+        // alert("reset");
+        GM_setValue("tg_setting",JSON.stringify(TGUserDefaultSetting));
+    });
+}
+
+function tgGetQueryString(name){
+    var reg = new RegExp("(^|&)" + name + "=([^&]*)(&|$)", "i");
+    var r = window.location.search.substr(1).match(reg);
+    if (r != null) return unescape(r[2]); return null;
+}
+
+
+(function() {
+    if(whetherInBlackList()){
+        return;
+    }
+
+    TGUserSetting = GM_getValue("tg_setting",JSON.stringify(TGUserDefaultSetting));
+    TGUserSetting = JSON.parse(TGUserSetting);
+    // console.log(TGUserSetting);
+    // Your code here...
+
+    var domain = window.location.host;
+    
+    if(domain == "herochansysu.gitlab.io"){
+    // if(domain == "192.168.1.33:8848"){
+        tgSettingPage();
+    }else{
+        tgVideoPageInit();
+    }
+
+ // 여기서 스타일을 추가합니다.
+GM_addStyle(`
+    .progress-bar-container {
+        width: 100%;
+        height: 16px;
+        background-color: #555;
+        position: absolute;
+        bottom: -22px;
+        border-radius: 2px;
+        overflow: hidden;
+        opacity: 1;
+        transition: opacity 5s ease-out; /* 페이드 아웃 애니메이션 */
+    }
+
+    .progress {
+        height: 100%;
+        background-color: #ff0000;
+        border-radius: 2px;
+        position: relative;
+    }
+
+    .progress-text {
+        position: absolute;
+        width: 100%;
+        text-align: center;
+        color: #fff;
+        font-size: 18px;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+    }
+`);
+
+
+
+    // 전체화면 모드에서 나갈 때 비디오 크기를 100%로 되돌리는 함수
+    function resetVideoScaleOnExitFullscreen() {
+        document.addEventListener('fullscreenchange', () => {
+            if (!document.fullscreenElement) {
+                const videos = document.querySelectorAll('video');
+                videos.forEach(video => {
+                    video.style.transform = 'scale(1)';
+                });
+            }
+        });
+    }
+
+    resetVideoScaleOnExitFullscreen();
+})();
+
+
