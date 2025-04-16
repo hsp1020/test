@@ -1,0 +1,473 @@
+// ==UserScript==
+// @name         Mobile Element Selector
+// @author       ZNJXL
+// @version      1.5
+// @namespace http://tampermonkey.net/
+// @description  모바일 요소 선택기
+// @match        *://*/*
+// @license      MIT
+// @grant        GM_setClipboard
+// @grant        GM_setValue
+// @grant        GM_getValue
+// @downloadURL https://update.greasyfork.org/scripts/532907/Mobile%20Element%20Selector.user.js
+// @updateURL https://update.greasyfork.org/scripts/532907/Mobile%20Element%20Selector.meta.js
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    let selecting = false;
+    let selectedEl = null;
+    let initialTouchedElement = null;
+    let includeSiteName = GM_getValue('includeSiteName', true);
+    let buttonOpacity = GM_getValue('buttonOpacity', 100);
+    let buttonSize = GM_getValue('buttonSize', 100);
+    let panelSize = GM_getValue('panelSize', 100);
+    let isBlocked = false; // 추가: 요소가 차단된 상태인지 여부
+
+    // 터치 탭/스크롤 구분용 변수
+    let touchStartX = 0, touchStartY = 0;
+    let touchMoved = false;
+    const moveThreshold = 10;
+
+    // UI 관련 CSS
+    const style = document.createElement('style');
+    style.textContent = `
+        .mobile-block-ui {
+            z-index: 9999 !important;
+            touch-action: manipulation !important;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            box-sizing: border-box;
+            user-select: none !important;
+            -webkit-user-select: none !important;
+            -moz-user-select: none !important;
+            -ms-user-select: none !important;
+        }
+        #blocker-slider {
+            width: 100%; margin: 10px 0; -webkit-appearance: none; appearance: none;
+            background: #555; height: 8px; border-radius: 5px; outline: none;
+        }
+        #blocker-slider::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none; width: 20px; height: 20px;
+            background: #4CAF50; border-radius: 50%; cursor: pointer;
+            border: 2px solid #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+        #blocker-slider::-moz-range-thumb {
+            width: 20px; height: 20px; background: #4CAF50; border-radius: 50%;
+            cursor: pointer; border: 2px solid #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+        #opacity-slider {
+            width: 100%; margin: 10px 0; -webkit-appearance: none; appearance: none;
+            background: #555; height: 8px; border-radius: 5px; outline: none;
+        }
+        #opacity-slider::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none; width: 20px; height: 20px;
+            background: #2196F3; border-radius: 50%; cursor: pointer;
+            border: 2px solid #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+        #opacity-slider::-moz-range-thumb {
+            width: 20px; height: 20px; background: #2196F3; border-radius: 50%;
+            cursor: pointer; border: 2px solid #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+        #button-size-slider {
+            width: 100%; margin: 10px 0; -webkit-appearance: none; appearance: none;
+            background: #555; height: 8px; border-radius: 5px; outline: none;
+        }
+        #button-size-slider::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none; width: 20px; height: 20px;
+            background: #FF9800; border-radius: 50%; cursor: pointer;
+            border: 2px solid #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+        #button-size-slider::-moz-range-thumb {
+            width: 20px; height: 20px; background: #FF9800; border-radius: 50%;
+            cursor: pointer; border: 2px solid #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+        #panel-size-slider {
+            width: 100%; margin: 10px 0; -webkit-appearance: none; appearance: none;
+            background: #555; height: 8px; border-radius: 5px; outline: none;
+        }
+        #panel-size-slider::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none; width: 20px; height: 20px;
+            background: #FF5722; border-radius: 50%; cursor: pointer;
+            border: 2px solid #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+        #panel-size-slider::-moz-range-thumb {
+            width: 20px; height: 20px; background: #FF5722; border-radius: 50%;
+            cursor: pointer; border: 2px solid #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+        .selected-element {
+            background-color: rgba(255, 0, 0, 0.25) !important;
+            z-index: 9998 !important;
+        }
+        #mobile-block-panel {
+            position: fixed; bottom: 60px; right: 15px;
+            background: rgba(40, 40, 40, 0.95); color: #eee; padding: 15px;
+            border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.6);
+            display: none; z-index: 10001; border-top: 1px solid rgba(255, 255, 255, 0.1);
+            width: 250px;
+            user-select: none !important;
+            -webkit-user-select: none !important;
+        }
+        #mobile-block-toggleBtn {
+            position: fixed; bottom: 15px; right: 15px; z-index: 10002;
+            background: linear-gradient(145deg, #f44336, #d32f2f); color: #fff;
+            width: 60px; height: 60px; border-radius: 50%; font-size: 14px; font-weight: 500;
+            border: none; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            transition: background 0.3s ease, transform 0.2s ease, box-shadow 0.3s ease;
+            display: flex; align-items: center; justify-content: center;
+            text-align: center; padding: 0;
+            opacity: ${buttonOpacity / 100};
+            user-select: none !important;
+            -webkit-user-select: none !important;
+        }
+        #mobile-block-toggleBtn.selecting { background: linear-gradient(145deg, #2196F3, #1976D2); }
+        #mobile-block-toggleBtn.restoring { background: linear-gradient(145deg, #4CAF50, #2E7D32); }
+        .mb-btn {
+            padding: 10px; border: none; border-radius: 8px; color: #fff;
+            font-size: 14px; cursor: pointer;
+            transition: background 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
+            background-color: #555; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            user-select: none !important;
+            -webkit-user-select: none !important;
+        }
+        .mb-btn:active { transform: scale(0.97); box-shadow: inset 0 2px 4px rgba(0,0,0,0.3); }
+        #blocker-copy { background: linear-gradient(145deg, #2196F3, #1976D2); }
+        #blocker-toggle-site { background: linear-gradient(145deg, #9C27B0, #7B1FA2); }
+        #blocker-block { background: linear-gradient(145deg, #f44336, #c62828); }
+        #blocker-cancel { background: linear-gradient(145deg, #607D8B, #455A64); }
+        #blocker-info-wrapper { position: relative; margin-bottom: 10px; }
+        #blocker-info {
+            display: block; color: #90ee90; font-size: 13px; line-height: 1.4;
+            background-color: rgba(0,0,0,0.3); padding: 5px 8px; border-radius: 4px;
+            word-break: break-all;
+            user-select: none !important;
+            -webkit-user-select: none !important;
+        }
+        .button-grid { 
+            display: grid; 
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px; 
+            margin-top: 10px;
+        }
+        .slider-container {
+            margin: 10px 0;
+        }
+        .slider-label {
+            font-size: 12px;
+            color: #ccc;
+            margin-bottom: 5px;
+            display: block;
+            user-select: none !important;
+            -webkit-user-select: none !important;
+        }
+    `;
+    document.head.appendChild(style);
+
+    // UI 패널 생성
+    const panel = document.createElement('div');
+    panel.id = 'mobile-block-panel';
+    panel.classList.add('mobile-block-ui', 'ui-ignore');
+    panel.innerHTML = `
+        <div id="blocker-info-wrapper">
+            <span style="font-size: 12px; color: #ccc;">선택된 요소:</span>
+            <span id="blocker-info">없음</span>
+        </div>
+        <input type="range" id="blocker-slider" min="0" max="10" value="0" class="ui-ignore">
+        <div class="slider-container">
+            <span class="slider-label">버튼 투명도: <span id="opacity-value">${buttonOpacity}%</span></span>
+            <input type="range" id="opacity-slider" min="10" max="100" value="${buttonOpacity}" class="ui-ignore">
+        </div>
+        <div class="slider-container">
+            <span class="slider-label">버튼 크기: <span id="button-size-value">${buttonSize}%</span></span>
+            <input type="range" id="button-size-slider" min="25" max="200" value="${buttonSize}" class="ui-ignore">
+        </div>
+        <div class="slider-container">
+            <span class="slider-label">선택기 창 크기: <span id="panel-size-value">${panelSize}%</span></span>
+            <input type="range" id="panel-size-slider" min="25" max="200" value="${panelSize}" class="ui-ignore">
+        </div>
+        <div class="button-grid">
+            <button id="blocker-copy" class="mb-btn ui-ignore">복사</button>
+            <button id="blocker-toggle-site" class="mb-btn ui-ignore">사이트명: ${includeSiteName ? 'ON' : 'OFF'}</button>
+            <button id="blocker-block" class="mb-btn ui-ignore">차단</button>
+            <button id="blocker-cancel" class="mb-btn ui-ignore">취소</button>
+        </div>
+    `;
+    document.body.appendChild(panel);
+
+    // 토글 버튼 생성
+    const toggleBtn = document.createElement('button');
+    toggleBtn.id = 'mobile-block-toggleBtn';
+    toggleBtn.classList.add('mobile-block-ui', 'ui-ignore');
+    toggleBtn.textContent = '차단';
+    document.body.appendChild(toggleBtn);
+
+    // 버튼 크기 업데이트 함수
+    function updateButtonSize(value) {
+        buttonSize = value;
+        GM_setValue('buttonSize', buttonSize);
+        const size = 60 * (buttonSize / 100);
+        toggleBtn.style.width = `${size}px`;
+        toggleBtn.style.height = `${size}px`;
+        toggleBtn.style.fontSize = `${14 * (buttonSize / 100)}px`;
+        document.querySelector('#button-size-value').textContent = `${buttonSize}%`;
+        document.querySelector('#button-size-slider').value = buttonSize;
+    }
+
+    // 패널 크기 업데이트 함수
+    function updatePanelSize(value) {
+        panelSize = value;
+        GM_setValue('panelSize', panelSize);
+        const scale = panelSize / 100;
+        panel.style.transform = `scale(${scale})`;
+        panel.style.transformOrigin = 'bottom right';
+        document.querySelector('#panel-size-value').textContent = `${panelSize}%`;
+        document.querySelector('#panel-size-slider').value = panelSize;
+    }
+
+    // 투명도 조절 함수
+    function updateButtonOpacity(value) {
+        buttonOpacity = value;
+        GM_setValue('buttonOpacity', buttonOpacity);
+        toggleBtn.style.opacity = buttonOpacity / 100;
+        document.querySelector('#opacity-value').textContent = `${buttonOpacity}%`;
+        document.querySelector('#opacity-slider').value = buttonOpacity;
+    }
+
+    // 차단/복원 상태 토글 함수
+    function toggleBlockRestore() {
+        if (!selectedEl) return;
+
+        if (!isBlocked) {
+            // 차단 상태로 전환
+            selectedEl.style.display = 'none';
+            isBlocked = true;
+            toggleBtn.textContent = '복원';
+            toggleBtn.classList.remove('selecting');
+            toggleBtn.classList.add('restoring');
+            document.querySelector('#blocker-block').textContent = '복원';
+        } else {
+            // 복원 상태로 전환
+            selectedEl.style.display = '';
+            isBlocked = false;
+            toggleBtn.textContent = '선택';
+            toggleBtn.classList.remove('restoring');
+            toggleBtn.classList.add('selecting');
+            document.querySelector('#blocker-block').textContent = '차단';
+        }
+    }
+
+    // 버튼 크기 슬라이더 이벤트
+    const buttonSizeSlider = panel.querySelector('#button-size-slider');
+    buttonSizeSlider.addEventListener('input', (e) => {
+        updateButtonSize(parseInt(e.target.value, 10));
+    });
+
+    // 패널 크기 슬라이더 이벤트
+    const panelSizeSlider = panel.querySelector('#panel-size-slider');
+    panelSizeSlider.addEventListener('input', (e) => {
+        updatePanelSize(parseInt(e.target.value, 10));
+    });
+
+    // 투명도 슬라이더 이벤트
+    const opacitySlider = panel.querySelector('#opacity-slider');
+    opacitySlider.addEventListener('input', (e) => {
+        updateButtonOpacity(parseInt(e.target.value, 10));
+    });
+
+    // 모드 토글 함수
+    function setBlockMode(enabled) {
+        selecting = enabled;
+        
+        if (enabled) {
+            toggleBtn.textContent = isBlocked ? '복원' : '선택';
+            toggleBtn.classList.toggle('selecting', !isBlocked);
+            toggleBtn.classList.toggle('restoring', isBlocked);
+        } else {
+            toggleBtn.textContent = '차단';
+            toggleBtn.classList.remove('selecting', 'restoring');
+        }
+        
+        panel.style.display = enabled ? 'block' : 'none';
+        
+        if (!enabled && selectedEl && !isBlocked) {
+            selectedEl.classList.remove('selected-element');
+            selectedEl = null;
+            initialTouchedElement = null;
+        }
+        
+        panel.querySelector('#blocker-slider').value = 0;
+        updateInfo();
+    }
+
+    // 선택된 요소 정보 업데이트
+    function updateInfo() {
+        const infoSpan = panel.querySelector('#blocker-info');
+        infoSpan.textContent = selectedEl ? generateSelector(selectedEl) : '없음';
+    }
+
+    // CSS 선택자 생성 함수
+    function generateSelector(el) {
+        if (!el || el.nodeType !== 1) return '';
+        const parts = [];
+        let current = el;
+        const maxDepth = 5;
+        let depth = 0;
+
+        while (current && current.tagName && current.tagName.toLowerCase() !== 'body' && current.tagName.toLowerCase() !== 'html' && depth < maxDepth) {
+            const parent = current.parentElement;
+            const tagName = current.tagName.toLowerCase();
+            let selectorPart = tagName;
+
+            if (current.id) {
+                selectorPart = `#${current.id}`;
+                parts.unshift(selectorPart);
+                depth++;
+                break;
+            } else {
+                const classes = Array.from(current.classList)
+                                   .filter(c => !['selected-element', 'mobile-block-ui', 'ui-ignore'].includes(c));
+                if (classes.length > 0) {
+                    selectorPart = '.' + classes.join('.');
+                } else if (parent) {
+                    const siblings = Array.from(parent.children);
+                    let sameTagIndex = 0;
+                    let found = false;
+                    for (let i = 0; i < siblings.length; i++) {
+                        if (siblings[i].tagName === current.tagName) {
+                            sameTagIndex++;
+                            if (siblings[i] === current) {
+                                found = true; break;
+                            }
+                        }
+                    }
+                    if (found && sameTagIndex > 0) {
+                         selectorPart = `${tagName}:nth-of-type(${sameTagIndex})`;
+                    }
+                }
+                parts.unshift(selectorPart);
+                depth++;
+            }
+
+            if (!parent || parent.tagName.toLowerCase() === 'body' || parent.tagName.toLowerCase() === 'html') {
+                break;
+            }
+            current = parent;
+        }
+        return parts.join(' > ');
+    }
+
+    // 터치 이벤트 핸들러
+    const uiExcludeClass = '.ui-ignore';
+    document.addEventListener('touchstart', e => {
+        if (!selecting || e.target.closest(uiExcludeClass)) return;
+        const touch = e.touches[0];
+        touchStartX = touch.clientX; touchStartY = touch.clientY; touchMoved = false;
+    }, { passive: true });
+
+    document.addEventListener('touchmove', e => {
+        if (!selecting || e.target.closest(uiExcludeClass) || !e.touches[0]) return;
+        if (!touchMoved) {
+            const touch = e.touches[0];
+            const dx = touch.clientX - touchStartX; const dy = touch.clientY - touchStartY;
+            if (Math.sqrt(dx * dx + dy * dy) > moveThreshold) touchMoved = true;
+        }
+    }, { passive: true });
+
+    document.addEventListener('touchend', e => {
+        if (!selecting || e.target.closest(uiExcludeClass)) return;
+        if (touchMoved) { touchMoved = false; return; }
+
+        e.preventDefault(); e.stopImmediatePropagation();
+        const touch = e.changedTouches[0];
+        const targetEl = document.elementFromPoint(touch.clientX, touch.clientY);
+
+        if (!targetEl || targetEl.closest(uiExcludeClass)) return;
+
+        if (selectedEl && !isBlocked) selectedEl.classList.remove('selected-element');
+        selectedEl = targetEl;
+        initialTouchedElement = targetEl;
+        
+        if (!isBlocked) {
+            selectedEl.classList.add('selected-element');
+        }
+        
+        panel.querySelector('#blocker-slider').value = 0;
+        updateInfo();
+    }, { capture: true, passive: false });
+
+    // 슬라이더 이벤트
+    const slider = panel.querySelector('#blocker-slider');
+    slider.addEventListener('input', handleSlider);
+    function handleSlider(e) {
+        if (!initialTouchedElement) return;
+        const level = parseInt(e.target.value, 10);
+        let current = initialTouchedElement;
+        for (let i = 0; i < level && current.parentElement; i++) {
+            if (current.parentElement.tagName.toLowerCase() === 'body' || current.parentElement.tagName.toLowerCase() === 'html') break;
+            current = current.parentElement;
+        }
+        if (selectedEl && !isBlocked) selectedEl.classList.remove('selected-element');
+        selectedEl = current;
+        
+        if (!isBlocked) {
+            selectedEl.classList.add('selected-element');
+        }
+        
+        updateInfo();
+    }
+
+    // 버튼 이벤트 핸들러
+    panel.querySelector('#blocker-copy').addEventListener('click', () => {
+        if (selectedEl) {
+            const fullSelector = generateSelector(selectedEl);
+            let finalSelector = "##" + fullSelector;
+            if (includeSiteName) finalSelector = location.hostname + finalSelector;
+            try {
+                GM_setClipboard(finalSelector);
+                alert('✅ 선택자가 복사되었습니다!\n' + finalSelector);
+            } catch (err) {
+                console.error("클립보드 복사 실패:", err);
+                alert("❌ 클립보드 복사에 실패했습니다.");
+                prompt("선택자를 직접 복사하세요:", finalSelector);
+            }
+        } else { alert('선택된 요소가 없습니다.'); }
+    });
+
+    panel.querySelector('#blocker-toggle-site').addEventListener('click', function() {
+        includeSiteName = !includeSiteName;
+        GM_setValue('includeSiteName', includeSiteName);
+        this.textContent = includeSiteName ? "사이트명: ON" : "사이트명: OFF";
+        this.style.background = includeSiteName ? 'linear-gradient(145deg, #8E24AA, #6A1B9A)' : 'linear-gradient(145deg, #9C27B0, #7B1FA2)';
+    });
+
+    panel.querySelector('#blocker-block').addEventListener('click', () => {
+        if (selectedEl) {
+            toggleBlockRestore();
+        } else { 
+            alert(isBlocked ? '복원할 요소가 선택되지 않았습니다.' : '차단할 요소가 선택되지 않았습니다.'); 
+        }
+    });
+
+    panel.querySelector('#blocker-cancel').addEventListener('click', () => setBlockMode(false));
+    toggleBtn.addEventListener('click', () => {
+        if (selecting && isBlocked) {
+            toggleBlockRestore();
+        } else {
+            setBlockMode(!selecting);
+        }
+    });
+
+    // 텍스트 선택 방지 이벤트 핸들러 추가
+    document.addEventListener('selectstart', function(e) {
+        if (e.target.classList.contains('mobile-block-ui') || 
+            e.target.classList.contains('ui-ignore') || 
+            e.target.closest('.mobile-block-ui')) {
+            e.preventDefault();
+        }
+    });
+
+    // 초기 설정 적용
+    updateButtonOpacity(buttonOpacity);
+    updateButtonSize(buttonSize);
+    updatePanelSize(panelSize);
+})();
