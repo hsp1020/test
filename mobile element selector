@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Mobile Element Selector
 // @author       ZNJXL
-// @version      1.5
+// @version      1.6
 // @namespace http://tampermonkey.net/
 // @description  모바일 요소 선택기
 // @match        *://*/*
@@ -24,6 +24,7 @@
     let buttonSize = GM_getValue('buttonSize', 100);
     let panelSize = GM_getValue('panelSize', 100);
     let isBlocked = false; // 추가: 요소가 차단된 상태인지 여부
+    let showSettings = false; // 추가: 설정 패널 표시 여부
 
     // 터치 탭/스크롤 구분용 변수
     let touchStartX = 0, touchStartY = 0;
@@ -134,7 +135,7 @@
         #blocker-copy { background: linear-gradient(145deg, #2196F3, #1976D2); }
         #blocker-toggle-site { background: linear-gradient(145deg, #9C27B0, #7B1FA2); }
         #blocker-block { background: linear-gradient(145deg, #f44336, #c62828); }
-        #blocker-cancel { background: linear-gradient(145deg, #607D8B, #455A64); }
+        #blocker-settings { background: linear-gradient(145deg, #607D8B, #455A64); }
         #blocker-info-wrapper { position: relative; margin-bottom: 10px; }
         #blocker-info {
             display: block; color: #90ee90; font-size: 13px; line-height: 1.4;
@@ -151,6 +152,7 @@
         }
         .slider-container {
             margin: 10px 0;
+            display: none; /* 기본적으로 숨김 */
         }
         .slider-label {
             font-size: 12px;
@@ -159,6 +161,9 @@
             display: block;
             user-select: none !important;
             -webkit-user-select: none !important;
+        }
+        .settings-visible .slider-container {
+            display: block; /* 설정 보기 모드에서만 표시 */
         }
     `;
     document.head.appendChild(style);
@@ -189,7 +194,7 @@
             <button id="blocker-copy" class="mb-btn ui-ignore">복사</button>
             <button id="blocker-toggle-site" class="mb-btn ui-ignore">사이트명: ${includeSiteName ? 'ON' : 'OFF'}</button>
             <button id="blocker-block" class="mb-btn ui-ignore">차단</button>
-            <button id="blocker-cancel" class="mb-btn ui-ignore">취소</button>
+            <button id="blocker-settings" class="mb-btn ui-ignore">설정</button>
         </div>
     `;
     document.body.appendChild(panel);
@@ -253,6 +258,16 @@
             toggleBtn.classList.remove('restoring');
             toggleBtn.classList.add('selecting');
             document.querySelector('#blocker-block').textContent = '차단';
+        }
+    }
+
+    // 설정 패널 토글 함수
+    function toggleSettings() {
+        showSettings = !showSettings;
+        if (showSettings) {
+            panel.classList.add('settings-visible');
+        } else {
+            panel.classList.remove('settings-visible');
         }
     }
 
@@ -448,7 +463,7 @@
         }
     });
 
-    panel.querySelector('#blocker-cancel').addEventListener('click', () => setBlockMode(false));
+    panel.querySelector('#blocker-settings').addEventListener('click', toggleSettings);
     toggleBtn.addEventListener('click', () => {
         if (selecting && isBlocked) {
             toggleBlockRestore();
