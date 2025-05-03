@@ -1,0 +1,125 @@
+// ==UserScript==
+// @name         YouTube Fullscreen Scroll Disabler
+// @namespace    https://youtube.com
+// @version      1.0.7
+// @description  Disable scrolling when YouTube is in fullscreen mode and hide scrollbar, with additional styling in fullscreen.
+// @author       Lolen10
+// @match        *://www.youtube.com/*
+// @icon         https://www.google.com/s2/favicons?domain=youtube.com
+// @grant        none
+// @license      GNU GPLv3
+// @downloadURL https://update.greasyfork.org/scripts/510801/YouTube%20Fullscreen%20Scroll%20Disabler.user.js
+// @updateURL https://update.greasyfork.org/scripts/510801/YouTube%20Fullscreen%20Scroll%20Disabler.meta.js
+// ==/UserScript==
+
+(function () {
+    'use strict';
+
+    let hiddenElements = [];
+    let mastheadElement = null;
+    let chromeTopElement = null;
+
+    // Add the CSS to disable scrolling and hide the scrollbar
+    const style = document.createElement('style');
+    document.head.appendChild(style);
+
+    let additionalStyle = null; // 추가 스타일을 저장할 변수
+
+    // Check for fullscreen change events
+    document.addEventListener('fullscreenchange', toggleScrollAndContent);
+    document.addEventListener('webkitfullscreenchange', toggleScrollAndContent); // For older browsers
+    document.addEventListener('mozfullscreenchange', toggleScrollAndContent); // For Firefox
+
+    // Disable scrolling and remove content when in fullscreen
+    function toggleScrollAndContent() {
+        if (isFullScreen()) {
+            removeContentBelowContainer();
+        } else {
+            restoreContentBelowContainer();
+        }
+    }
+
+    // Check if the document is in fullscreen mode
+    function isFullScreen() {
+        return document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement;
+    }
+
+    // Function to remove all content below the video-player
+    function removeContentBelowContainer() {
+        const masthead = document.getElementById('masthead');
+        if (masthead) {
+            mastheadElement = masthead; // masthead 요소 저장
+            masthead.style.display = 'none'; // 투명도 0으로 설정
+        }
+
+        const chromeTop = document.querySelector('.ytp-chrome-top');
+        if (chromeTop) {
+            chromeTopElement = chromeTop; // chrome-top 요소 저장
+            chromeTop.style.display = 'none'; // chrome-top 요소 숨기기
+        }
+
+        const container = document.getElementById('single-column-container');
+        if (container) {
+            let nextSibling = container.nextElementSibling;
+
+            // Loop through all next sibling elements and hide them
+            while (nextSibling) {
+                hiddenElements.push(nextSibling); // Save hidden elements
+                nextSibling.style.display = 'none'; // Hide the element
+                nextSibling = nextSibling.nextElementSibling;
+            }
+        }
+
+        // 스타일 추가
+        if (!additionalStyle) {
+            additionalStyle = document.createElement('style');
+            additionalStyle.textContent = `
+                ytd-app {
+                    background-color: #000000 !important;
+                    color: #ffffff !important;
+                }
+            `;
+            document.head.appendChild(additionalStyle);
+        }
+    }
+
+    // Function to restore content that was hidden when exiting fullscreen-mode
+    function restoreContentBelowContainer() {
+        if (mastheadElement) {
+            mastheadElement.style.display = ''; // masthead 표시
+            mastheadElement = null; // 변수 초기화
+        }
+
+        if (chromeTopElement) {
+            chromeTopElement.style.display = ''; // chrome-top 다시 표시
+            chromeTopElement = null; // 변수 초기화
+        }
+
+        hiddenElements.forEach(element => {
+            element.style.display = ''; // Reset the display property to show them again
+        });
+        hiddenElements = []; // Clear the list after restoring
+
+        // 스타일 제거
+        if (additionalStyle) {
+            additionalStyle.remove();
+            additionalStyle = null;
+        }
+    }
+
+    // 기본 스크롤바 제거 스타일 적용
+    style.textContent = `
+        html {
+            scrollbar-width: none !important;
+        }
+        ::-webkit-scrollbar {
+            width: 0px;
+        }
+        body:not(.style-scope)[standardized-themed-scrollbar]:not(.style-scope):not([no-y-overflow]):not(.style-scope)::-webkit-scrollbar {
+            width: 0px !important;
+        }
+        ytd-app {
+            scrollbar-width: none !important;
+        }
+    `;
+})();

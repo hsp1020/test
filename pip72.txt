@@ -1,0 +1,283 @@
+// ==UserScript==
+// @name         HTML5 player PIP 버튼 추가
+// @namespace    HSP
+// @version      1.2
+// @description  HTML5 비디오에서 PIP 버튼 추가
+// @include      *://*/*
+// @match        https://www.tving.com/*
+// @grant        none
+// ==/UserScript==
+
+(function () {
+    'use strict';
+
+
+    let hideTimer;
+    let hideAfterShowTimer;
+
+    // HTML5 player용 PIP 버튼 생성
+    function createPIPButton(video, handlePIP) {
+        const container = document.createElement('div');
+        container.style.cssText = `
+            position: absolute;
+            top: 50%;
+            right: 0px;
+            transform: translateY(-50%);
+            display: none;
+            z-index: 99999;
+            pointer-events: none;
+        `;
+
+        const pipButton = document.createElement('div');
+        pipButton.className = 'videoPIPButton';
+        pipButton.style.cssText = `
+            background: rgba(0, 0, 0, 0);
+            border: none;
+            padding: 0px;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            pointer-events: auto;
+        `;
+
+        const pipIcon = document.createElement('img');
+        pipIcon.src = 'data:image/svg+xml;base64,PCFET0NUWVBFIHN2ZyBQVUJMSUMgIi0vL1czQy8vRFREIFNWRyAxLjEvL0VOIiAiaHR0cDovL3d3dy53My5vcmcvR3JhcGhpY3MvU1ZHLzEuMS9EVEQvc3ZnMTEuZHRkIj4KCjwhLS0gVXBsb2FkZWQgdG86IFNWRyBSZXBvLCB3d3cuc3ZncmVwby5jb20sIFRyYW5zZm9ybWVkIGJ5OiBTVkcgUmVwbyBNaXhlciBUb29scyAtLT4KPHN2ZyB3aWR0aD0iODAwcHgiIGhlaWdodD0iODAwcHgiIHZpZXdCb3g9Ii00LjggLTQuOCAzMy42MCAzMy42MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiBzdHJva2U9IiMwMDAwMDAiPgoKPGcgaWQ9IlNWR1JlcG9fYmdDYXJyaWVyIiBzdHJva2Utd2lkdGg9IjAiLz4KCjxnIGlkPSJTVkdSZXBvX3RyYWNlckNhcnJpZXIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPgoKPGcgaWQ9IlNWR1JlcG9faWNvbkNhcnJpZXIiPiA8cGF0aCBkPSJNMTEgMjFIMTBDNi4yMjg3NiAyMSA0LjM0MzE1IDIxIDMuMTcxNTcgMTkuODI4NEMyIDE4LjY1NjkgMiAxNi43NzEyIDIgMTNWMTFDMiA3LjIyODc2IDIgNS4zNDMxNSAzLjE3MTU3IDQuMTcxNTdDNC4zNDMxNSAzIDYuMjI4NzYgMyAxMCAzSDE0QzE3Ljc3MTIgMyAxOS42NTY5IDMgMjAuODI4NCA0LjE3MTU3QzIyIDUuMzQzMTUgMjIgNy4yMjg3NiAyMiAxMSIgc3Ryb2tlPSIjZWRlZGVkIiBzdHJva2Utd2lkdGg9IjEuOTQ0MDAwMDAwMDAwMDAwMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+IDxwYXRoIGQ9Ik0xMyAxN0MxMyAxNS4xMTQ0IDEzIDE0LjE3MTYgMTMuNTg1OCAxMy41ODU4QzE0LjE3MTYgMTMgMTUuMTE0NCAxMyAxNyAxM0gxOEMxOS44ODU2IDEzIDIwLjgyODQgMTMgMjEuNDE0MiAxMy41ODU4QzIyIDE0LjE3MTYgMjIgMTUuMTE0NCAyMiAxN0MyMiAxOC44ODU2IDIyIDE5LjgyODQgMjEuNDE0MiAyMC40MTQyQzIwLjgyODQgMjEgMTkuODg1NiAyMSAxOCAyMUgxN0MxNS4xMTQ0IDIxIDE0LjE3MTYgMjEgMTMuNTg1OCAyMC40MTQyQzEzIDE5LjgyODQgMTMgMTguODg1NiAxMyAxN1oiIHN0cm9rZT0iI2VkZWRlZCIgc3Ryb2tlLXdpZHRoPSIxLjk0NDAwMDAwMDAwMDAwMDIiLz4gPHBhdGggZD0iTTExLjUgMTEuNVY4LjVNMTEuNSAxMS41SDguNU0xMS41IDExLjVMNy41IDcuNSIgc3Ryb2tlPSIjZWRlZGVkIiBzdHJva2Utd2lkdGg9IjEuOTQ0MDAwMDAwMDAwMDAwMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+IDwvZz4KCjwvc3ZnPg=='; // Base64 인코딩된 SVG 내용
+        pipIcon.style.cssText = `
+            width: 70%;
+            height: 70%;
+            margin-right: 1;
+            transform: translateX(-1%);
+        `;
+        pipButton.appendChild(pipIcon);
+
+        pipButton.addEventListener('click', handlePIP);
+
+        container.appendChild(pipButton);
+        video.parentElement.appendChild(container);
+
+        hideTimer = setTimeout(() => hideButton(video), 2000);
+        video.addEventListener('touchstart', (e) => handleShowButton(e, video)); 
+        video.addEventListener('mousemove', (e) => handleShowButton(e, video));
+    }
+
+    function handleShowButton(event, video) {
+        const rect = video.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const isRight10Percent = x >= rect.width * 0.9;
+
+        if (isRight10Percent) {
+            showButton(video);
+        }
+    }
+
+    function showButton(video) {
+        const button = video.parentElement.querySelector('.videoPIPButton');
+        if (button) {
+            button.parentElement.style.display = 'block';
+            button.style.opacity = 1;
+            clearTimeout(hideTimer);
+            clearTimeout(hideAfterShowTimer);
+            hideAfterShowTimer = setTimeout(() => hideButton(video), 2000);
+        }
+    }
+
+    function hideButton(video) {
+        const button = video.parentElement.querySelector('.videoPIPButton');
+        if (button) {
+            button.parentElement.style.display = 'block';
+            button.style.opacity = 0;
+        }
+    }
+
+    function addControlsToVideos() {
+        document.querySelectorAll('video').forEach(video => {
+            if (!video.parentElement.querySelector('.videoPIPButton')) {
+                const handlePIP = () => {
+                    if (document.pictureInPictureElement === video) {
+                        document.exitPictureInPicture();
+                    } else {
+                        if (video.getAttribute('disablePictureInPicture') !== null) {
+                            video.removeAttribute('disablePictureInPicture');
+                        }
+                        video.requestPictureInPicture();
+                    }
+                    showButton(video);
+                };
+                createPIPButton(video, handlePIP);
+            }
+        });
+    }
+
+    // Tving에서 사용할 투명 오버레이 및 PIP 버튼 생성
+    function createOverlay() {
+        const playerContainer = document.querySelector('.player-container');
+        if (!playerContainer) return;
+
+        if (playerContainer.querySelector('#custom-player-overlay')) return;
+
+        const overlay = document.createElement('div');
+        overlay.id = 'custom-player-overlay';
+        overlay.style.position = 'absolute';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100%';
+        overlay.style.height = '100%';
+        overlay.style.backgroundColor = 'rgba(255, 255, 255, 0)';
+        overlay.style.pointerEvents = 'none';
+        overlay.style.zIndex = '10';
+        playerContainer.style.position = 'relative';
+        playerContainer.appendChild(overlay);
+    }
+
+    function createTvingPipButton() {
+        const playerContainer = document.querySelector('.player-container');
+        if (!playerContainer) return;
+
+        if (playerContainer.querySelector('#pip-button')) return;
+
+   const pipButton = document.createElement('button');
+pipButton.id = 'pip-button';
+pipButton.style.position = 'absolute';
+pipButton.style.top = '50%';
+pipButton.style.right = '20px';
+pipButton.style.transform = 'translateY(-50%)';
+pipButton.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';  // 투명 배경
+pipButton.style.border = 'none';
+pipButton.style.width = '50px';  // 크기 30px
+pipButton.style.height = '50px';  // 크기 30px
+pipButton.style.borderRadius = '50%';  // 동그랗게 만들기
+pipButton.style.padding = '0';  // 내부 여백 제거
+pipButton.style.cursor = 'pointer';
+pipButton.style.zIndex = '20';
+pipButton.style.display = 'flex';  // 플렉스 박스로 설정
+pipButton.style.justifyContent = 'center';  // 수평 중앙 정렬
+pipButton.style.alignItems = 'center';  // 수직 중앙 정렬
+pipButton.textContent = 'PIP';
+pipButton.style.fontSize = '20px'; // 글씨 크기 설정
+
+        pipButton.onclick = function() {
+            const video = playerContainer.querySelector('video');
+            if (video) {
+                if (video.getAttribute('disablePictureInPicture') !== null) {
+                    video.removeAttribute('disablePictureInPicture');
+                }
+
+                if (document.pictureInPictureEnabled) {
+                    if (document.pictureInPictureElement) {
+                        document.exitPictureInPicture();
+                    } else {
+                        video.requestPictureInPicture();
+                    }
+                }
+            }
+        };
+
+        playerContainer.appendChild(pipButton);
+    }
+
+    // YouTube에서 PIP 버튼 추가
+    function createYouTubePIPButton() {
+        const buttonSize = 35;
+        const pipButton = document.createElement('div');
+        pipButton.style.position = 'relative';
+        pipButton.style.zIndex = '1';
+        pipButton.style.background = 'rgba(0, 0, 0, 0.3)';
+        pipButton.style.border = 'none';
+        pipButton.style.borderRadius = '10px';
+        pipButton.style.padding = '0px';
+        pipButton.style.cursor = 'pointer';
+        pipButton.style.width = `${buttonSize}px`;
+        pipButton.style.height = `${buttonSize}px`;
+        pipButton.style.pointerEvents = 'auto';
+        pipButton.style.display = 'flex';
+        pipButton.style.alignItems = 'center';
+        pipButton.style.justifyContent = 'center';
+
+        const pipIcon = document.createElement('img');
+        pipIcon.src = 'data:image/svg+xml;base64,PCFET0NUWVBFIHN2ZyBQVUJMSUMgIi0vL1czQy8vRFREIFNWRyAxLjEvL0VOIiAiaHR0cDovL3d3dy53My5vcmcvR3JhcGhpY3MvU1ZHLzEuMS9EVEQvc3ZnMTEuZHRkIj4KCjwhLS0gVXBsb2FkZWQgdG86IFNWRyBSZXBvLCB3d3cuc3ZncmVwby5jb20sIFRyYW5zZm9ybWVkIGJ5OiBTVkcgUmVwbyBNaXhlciBUb29scyAtLT4KPHN2ZyB3aWR0aD0iODAwcHgiIGhlaWdodD0iODAwcHgiIHZpZXdCb3g9Ii00LjggLTQuOCAzMy42MCAzMy42MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiBzdHJva2U9IiMwMDAwMDAiPgoKPGcgaWQ9IlNWR1JlcG9fYmdDYXJyaWVyIiBzdHJva2Utd2lkdGg9IjAiLz4KCjxnIGlkPSJTVkdSZXBvX3RyYWNlckNhcnJpZXIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPgoKPGcgaWQ9IlNWR1JlcG9faWNvbkNhcnJpZXIiPiA8cGF0aCBkPSJNMTEgMjFIMTBDNi4yMjg3NiAyMSA0LjM0MzE1IDIxIDMuMTcxNTcgMTkuODI4NEMyIDE4LjY1NjkgMiAxNi43NzEyIDIgMTNWMTFDMiA3LjIyODc2IDIgNS4zNDMxNSAzLjE3MTU3IDQuMTcxNTdDNC4zNDMxNSAzIDYuMjI4NzYgMyAxMCAzSDE0QzE3Ljc3MTIgMyAxOS42NTY5IDMgMjAuODI4NCA0LjE3MTU3QzIyIDUuMzQzMTUgMjIgNy4yMjg3NiAyMiAxMSIgc3Ryb2tlPSIjZWRlZGVkIiBzdHJva2Utd2lkdGg9IjEuOTQ0MDAwMDAwMDAwMDAwMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+IDxwYXRoIGQ9Ik0xMyAxN0MxMyAxNS4xMTQ0IDEzIDE0LjE3MTYgMTMuNTg1OCAxMy41ODU4QzE0LjE3MTYgMTMgMTUuMTE0NCAxMyAxNyAxM0gxOEMxOS44ODU2IDEzIDIwLjgyODQgMTMgMjEuNDE0MiAxMy41ODU4QzIyIDE0LjE3MTYgMjIgMTUuMTE0NCAyMiAxN0MyMiAxOC44ODU2IDIyIDE5LjgyODQgMjEuNDE0MiAyMC40MTQyQzIwLjgyODQgMjEgMTkuODg1NiAyMSAxOCAyMUgxN0MxNS4xMTQ0IDIxIDE0LjE3MTYgMjEgMTMuNTg1OCAyMC40MTQyQzEzIDE5LjgyODQgMTMgMTguODg1NiAxMyAxN1oiIHN0cm9rZT0iI2VkZWRlZCIgc3Ryb2tlLXdpZHRoPSIxLjk0NDAwMDAwMDAwMDAwMDIiLz4gPHBhdGggZD0iTTExLjUgMTEuNVY4LjVNMTEuNSAxMS41SDguNU0xMS41IDExLjVMNy41IDcuNSIgc3Ryb2tlPSIjZWRlZGVkIiBzdHJva2Utd2lkdGg9IjEuOTQ0MDAwMDAwMDAwMDAwMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+IDwvZz4KCjwvc3ZnPg=='; // Base64 인코딩된 SVG 내용
+        pipIcon.style.cssText = `
+            width: 100%;
+            height: 100%;
+        `;
+        pipButton.appendChild(pipIcon);
+
+        pipButton.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const video = document.querySelector('video');
+    if (video) {
+        if (document.pictureInPictureElement) {
+            document.exitPictureInPicture();
+        } else {
+            if (video.getAttribute('disablePictureInPicture') !== null) {
+                video.removeAttribute('disablePictureInPicture');
+            }
+            video.requestPictureInPicture();
+        }
+    }
+});
+
+return pipButton;
+    }
+
+    function addYouTubePIPButton() {
+        setInterval(() => {
+            const player = document.querySelector('#movie_player, .html5-video-player');
+            if (player && !player.querySelector('.pip-button')) {
+                let parent = document.getElementById('actions') || document.querySelector('.slim-video-action-bar-actions, .reel-player-overlay-actions');
+                if (parent && !document.getElementById("pipbutton")) {
+                    const wrapper = document.createElement('div');
+                    wrapper.setAttribute("id", "pipbutton");
+                    parent.insertBefore(wrapper, parent.firstChild);
+
+                    const pipButton = createYouTubePIPButton();
+                    pipButton.classList.add('pip-button');
+                    wrapper.appendChild(pipButton);
+                }
+            }
+        }, 1000);
+    }
+
+    const observer = new MutationObserver(() => {
+        if (window.location.hostname.includes('youtube.com')) {
+            addYouTubePIPButton();
+        } else if (window.location.hostname.includes('tving.com')) {
+            createOverlay();
+            createTvingPipButton();
+        } else {
+            addControlsToVideos();
+        }
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+
+
+    document.addEventListener('enterpictureinpicture', function(event) {
+        const video = event.target;
+        video.play().catch(error => {
+            console.error('PiP 모드에서 비디오 재생 실패:', error);
+        });
+
+        setTimeout(() => {
+            if (video.paused) {
+                video.play().catch(error => {
+                    console.error('1초 후 비디오 재생 실패:', error);
+                });
+            }
+        }, 300);
+    });
+
+    document.addEventListener('leavepictureinpicture', function(event) {
+        const video = event.target;
+        if (!video.paused) {
+            setTimeout(() => {
+                video.play().catch(error => {
+                    console.error('PiP 모드에서 나와도 비디오 재생 유지 실패:', error);
+                });
+            }, 0);
+        }
+    });
+
+})();
